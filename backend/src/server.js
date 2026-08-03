@@ -2,6 +2,7 @@ require('express-async-errors'); // faz erro/rejeicao nao tratada numa rota asyn
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -56,6 +57,21 @@ const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*' }));
 app.use(express.json());
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Downloads publicos para instalacao de teste. `res.download` acrescenta
+// Content-Disposition e o nome correto do arquivo, evitando navegadores
+// Android que ficam presos ao baixar o blob pelo endereco raw do GitHub.
+const apkDirectory = path.resolve(__dirname, '..', '..', 'downloads');
+function sendApk(filename) {
+  return (_req, res, next) => {
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.download(path.join(apkDirectory, filename), filename, (error) => {
+      if (error && !res.headersSent) next(error);
+    });
+  };
+}
+app.get('/downloads/VaiEscolar-Motorista.apk', sendApk('VaiEscolar-Motorista-arm64.apk'));
+app.get('/downloads/VaiEscolar-Responsavel.apk', sendApk('VaiEscolar-Responsavel-arm64.apk'));
 
 // Rate limit mais restrito nos endpoints publicos de auth (forca bruta de
 // login/senha, spam de cadastro/convite); geral mais frouxo no resto da API.
