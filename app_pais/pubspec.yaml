@@ -1,0 +1,42 @@
+name: app_pais
+description: App dos pais - mapa ao vivo, timeline e notificacoes push (stack 100% gratuita).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  google_maps_flutter: ^2.6.0
+  web_socket_channel: ^3.0.0
+  shared_preferences: ^2.2.0
+  google_fonts: ^6.2.1
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.3
+  mobile_scanner: ^5.2.3
+  geocoding: ^5.0.0
+  package_info_plus: ^8.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_native_splash: ^2.4.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/map_style.json
+
+# Splash nativa (gerada com `dart run flutter_native_splash:create`) --
+# substitui a splash branca padrao do Flutter enquanto nao existe um
+# logotipo definitivo (ver README, secao de identidade visual pendente).
+flutter_native_splash:
+  color: "#0F6B6B"
+  color_dark: "#0E1514"
+  android_12:
+    color: "#0F6B6B"
+    color_dark: "#0E1514"
