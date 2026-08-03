@@ -35,3 +35,4 @@ build/
 # SO
 .DS_Store
 Thumbs.db
+.codex-remote-attachments/
