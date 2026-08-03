@@ -72,6 +72,7 @@ function sendApk(filename) {
 }
 app.get('/downloads/VaiEscolar-Motorista.apk', sendApk('VaiEscolar-Motorista-arm64.apk'));
 app.get('/downloads/VaiEscolar-Responsavel.apk', sendApk('VaiEscolar-Responsavel-arm64.apk'));
+app.get('/downloads/VaiEscolar-Responsavel.zip', sendApk('VaiEscolar-Responsavel.zip'));
 
 // Rate limit mais restrito nos endpoints publicos de auth (forca bruta de
 // login/senha, spam de cadastro/convite); geral mais frouxo no resto da API.
