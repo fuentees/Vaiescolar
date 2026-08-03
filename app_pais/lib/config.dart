@@ -1,9 +1,9 @@
-// No emulador Android o default (10.0.2.2) ja aponta pro backend local.
-// Pra outros ambientes (device fisico, producao), builde com:
-//   flutter build apk --dart-define=API_BASE=https://sua-api.com --dart-define=WS_BASE=wss://sua-api.com
+// Producao usa o backend publico do Render por padrao. Para desenvolvimento
+// local, sobrescreva com --dart-define=API_BASE=http://10.0.2.2:3000 e
+// --dart-define=WS_BASE=ws://10.0.2.2:3000.
 class Config {
   static const String apiBase =
-      String.fromEnvironment('API_BASE', defaultValue: 'http://10.0.2.2:3000');
+      String.fromEnvironment('API_BASE', defaultValue: 'https://vaiescolar.onrender.com');
   static const String wsBase =
-      String.fromEnvironment('WS_BASE', defaultValue: 'ws://10.0.2.2:3000');
+      String.fromEnvironment('WS_BASE', defaultValue: 'wss://vaiescolar.onrender.com');
 }
