@@ -256,8 +256,10 @@ class TrackingService {
     if (_evaluatingProximity || _stops.isEmpty || pos.accuracy > 100) return;
     final next = _stops.cast<_ProximityStop?>().firstWhere(
           (stop) => _direction == 'to_home'
-              ? stop!.status != 'dropped'
-              : stop!.status != 'boarded' && stop.status != 'dropped',
+              ? stop!.status != 'dropped' && stop.status != 'not_found'
+              : stop!.status != 'boarded' &&
+                  stop.status != 'dropped' &&
+                  stop.status != 'not_found',
           orElse: () => null,
         );
     if (next == null || next.alertSent) return;

@@ -21,7 +21,7 @@ const locationsBody = z.union([locationPing, z.array(locationPing).max(200)]);
 // vir sem GPS), mas se vierem precisam estar na faixa valida.
 const tripEventBody = z.object({
   student_id: z.string().min(1),
-  type: z.enum(['boarded', 'dropped']),
+  type: z.enum(['boarded', 'dropped', 'not_found']),
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
   received_by: z.string().trim().min(2).max(200).nullable().optional(),

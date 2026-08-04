@@ -226,6 +226,9 @@ CREATE TABLE IF NOT EXISTS trip_events (
   at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_events_trip ON trip_events(trip_id, at);
+ALTER TABLE trip_events DROP CONSTRAINT IF EXISTS trip_events_type_check;
+ALTER TABLE trip_events ADD CONSTRAINT trip_events_type_check
+  CHECK (type IN ('boarded','dropped','not_found'));
 -- Pessoa ou instituição que recebeu o aluno no desembarque. Mantém a
 -- rastreabilidade sem alterar eventos antigos, que ficam com valor nulo.
 ALTER TABLE trip_events ADD COLUMN IF NOT EXISTS received_by TEXT;

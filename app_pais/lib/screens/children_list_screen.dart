@@ -32,6 +32,9 @@ class _ActiveTrip {
   final double? targetLat;
   final double? targetLng;
   final bool emergencyReturnActive;
+  final String? vehiclePlate;
+  final String? vehicleModel;
+  final String? vehicleColor;
 
   _ActiveTrip({
     required this.tripId,
@@ -46,6 +49,9 @@ class _ActiveTrip {
     this.targetLat,
     this.targetLng,
     this.emergencyReturnActive = false,
+    this.vehiclePlate,
+    this.vehicleModel,
+    this.vehicleColor,
   });
 
   String get status {
@@ -155,6 +161,9 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
         targetLat: number('target_lat'),
         targetLng: number('target_lng'),
         emergencyReturnActive: row['emergency_return_active'] == true,
+        vehiclePlate: row['vehicle_plate'] as String?,
+        vehicleModel: row['vehicle_model'] as String?,
+        vehicleColor: row['vehicle_color'] as String?,
       );
     }
   }
@@ -413,6 +422,13 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
           ],
           Text(_updatedLabel(trip.locationAt),
               style: const TextStyle(color: Colors.white, fontSize: 13)),
+          if (trip.vehiclePlate != null) ...[
+            const SizedBox(height: 5),
+            Text(
+              'Van ${trip.vehiclePlate}${trip.vehicleModel == null ? '' : ' • ${trip.vehicleModel}'}${trip.vehicleColor == null ? '' : ' • ${trip.vehicleColor}'}',
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ],
           if (trip.lastEventType != 'boarded') ...[
             const SizedBox(height: 5),
             Text(

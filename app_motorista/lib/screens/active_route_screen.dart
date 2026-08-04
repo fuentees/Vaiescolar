@@ -312,33 +312,51 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
         _direction == 'to_school' ? 'ida (para a escola)' : 'volta (para casa)';
     final pendentes = _students
         .where((student) =>
-            student['absent'] != true && student['last_status'] != 'dropped')
+            student['absent'] != true &&
+            student['last_status'] != 'dropped' &&
+            student['last_status'] != 'not_found')
         .length;
     final avisoPendencias = pendentes > 0
         ? '\n\nAtenção: $pendentes ${pendentes == 1 ? 'aluno ainda não teve o desembarque confirmado' : 'alunos ainda não tiveram o desembarque confirmado'}.'
         : '';
 
+    var vanChecked = false;
     final confirmado = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Finalizar rota?'),
-        content: Text(
-          '"$routeName" — $direcao, iniciada às $horario. '
-          'O rastreamento será encerrado e não pode ser desfeito.'
-          '$avisoPendencias',
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, setDialogState) => AlertDialog(
+          title: const Text('Finalizar rota?'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              '"$routeName" — $direcao, iniciada às $horario. '
+              'O rastreamento será encerrado e não pode ser desfeito.'
+              '$avisoPendencias',
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              value: vanChecked,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Conferi todos os bancos'),
+              subtitle: const Text(
+                  'Confirmo que nenhum aluno permaneceu dentro da van.'),
+              onChanged: (value) =>
+                  setDialogState(() => vanChecked = value == true),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  foregroundColor: Colors.white),
+              onPressed:
+                  vanChecked ? () => Navigator.pop(dialogContext, true) : null,
+              child: const Text('Finalizar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Finalizar'),
-          ),
-        ],
       ),
     );
     if (confirmado != true) return;
@@ -549,6 +567,30 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     }
     if (!mounted) return;
     setState(() => _busyStudentIds.remove(studentId));
+  }
+
+  Future<void> _markNotFound(
+      String studentId, String name, String? status) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Aluno não localizado?'),
+        content: Text(
+          'O responsável por $name será avisado de que o aluno não estava no ponto. Se ele aparecer depois, ainda será possível marcar o embarque.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Voltar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Avisar responsável')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _mark(studentId, name, 'not_found', status);
+    }
   }
 
   Future<void> _undo(String studentId) async {
@@ -1079,7 +1121,9 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                               ? 'Embarcou'
                               : status == 'dropped'
                                   ? 'Desceu'
-                                  : 'Aguardando';
+                                  : status == 'not_found'
+                                      ? 'Não localizado no ponto'
+                                      : 'Aguardando';
 
                       return Card(
                         margin: const EdgeInsets.symmetric(
@@ -1235,6 +1279,19 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                     ),
                                   ),
                                 ]),
+                              if (!busy &&
+                                  status != 'boarded' &&
+                                  status != 'dropped')
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: TextButton.icon(
+                                    onPressed: status == 'not_found'
+                                        ? null
+                                        : () => _markNotFound(id, name, status),
+                                    icon: const Icon(Icons.person_off_outlined),
+                                    label: const Text('Aluno não localizado'),
+                                  ),
+                                ),
                               if (!busy && status != null && !emergencyReturn)
                                 Align(
                                   alignment: Alignment.centerRight,

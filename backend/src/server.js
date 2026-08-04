@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.14', buildNumber: 4020, releaseBuild: 20,
+      version: '1.0.15', buildNumber: 4021, releaseBuild: 21,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona SOS, bloqueio de lotação, alerta de GPS parado e confirmação coletiva por escola.',
+      notes: 'Adiciona aluno não localizado, conferência da van vazia e identificação completa do veículo.',
     },
     responsavel: {
-      version: '1.0.14', buildNumber: 4020, releaseBuild: 20,
+      version: '1.0.15', buildNumber: 4021, releaseBuild: 21,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona SOS, bloqueio de lotação, alerta de GPS parado e confirmação coletiva por escola.',
+      notes: 'Adiciona aluno não localizado, conferência da van vazia e identificação completa do veículo.',
     },
   };
   const version = versions[req.params.app];
@@ -1378,7 +1378,10 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
     r = await db.query(
       `SELECT * FROM (
          SELECT 'trip_event' AS type,
-                s.name || ' ' || CASE WHEN te.type='boarded' THEN 'embarcou na van' ELSE 'chegou / desceu' END AS message,
+                s.name || ' ' || CASE
+                  WHEN te.type='boarded' THEN 'embarcou na van'
+                  WHEN te.type='not_found' THEN 'nao foi localizado no ponto'
+                  ELSE 'chegou / desceu' END AS message,
                 te.at AS created_at, te.trip_id::text AS entity_id
            FROM trip_events te
            JOIN students s ON s.id = te.student_id
@@ -1794,6 +1797,7 @@ app.get('/api/trips/mine/active', authMiddleware, requireRole('driver', 'admin')
 app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, res) => {
   const r = await db.query(
     `SELECT DISTINCT t.id AS trip_id, t.direction, t.started_at, r.name AS route_name,
+            v.plate AS vehicle_plate, v.model AS vehicle_model, v.color AS vehicle_color,
             s.id AS student_id, s.name AS student_name,
             event.type AS last_event_type, event.at AS last_event_at,
             location.recorded_at AS location_recorded_at,
@@ -1807,6 +1811,7 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
                  WHEN t.direction='to_school' THEN sc.lng ELSE s.home_lng END AS target_lng
        FROM trips t
        JOIN routes r ON r.id = t.route_id
+       LEFT JOIN vehicles v ON v.id=t.vehicle_id
        JOIN route_students rs ON rs.route_id = t.route_id
        JOIN students s ON s.id = rs.student_id
        JOIN student_guardians sg ON sg.student_id = s.id
@@ -1825,7 +1830,7 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
       WHERE t.tenant_id = $1
         AND t.status = 'active'
         AND sg.guardian_user_id = $2
-        AND (COALESCE(event.type, '') <> 'dropped' OR COALESCE(er.active, false))
+        AND (COALESCE(event.type, '') NOT IN ('dropped','not_found') OR COALESCE(er.active, false))
       ORDER BY t.started_at DESC`,
     [req.auth.tenantId, req.auth.userId]
   );
@@ -2129,7 +2134,11 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
       const studentName = info.rows[0].student_name;
       const when = new Date(r.rows[0].at);
       const timeBrasilia = brasiliaTimeFormatter.format(when);
-      const action = type === 'boarded' ? 'embarcou na van' : 'chegou / desceu';
+      const action = type === 'boarded'
+        ? 'embarcou na van'
+        : type === 'not_found'
+          ? 'nao foi localizado no ponto'
+          : 'chegou / desceu';
       const receiver = type === 'dropped' && received_by
         ? `, recebido por ${received_by.trim()}`
         : '';
