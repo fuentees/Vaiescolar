@@ -57,6 +57,23 @@ const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*' }));
 app.use(express.json());
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/app-version/:app', (req, res) => {
+  const versions = {
+    motorista: {
+      version: '0.2.0', buildNumber: 2,
+      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Motorista.apk',
+      notes: 'Notificações sonoras, chat com leitura e melhorias no mapa.',
+    },
+    responsavel: {
+      version: '0.2.0', buildNumber: 2,
+      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Responsavel.zip',
+      notes: 'Notificações sonoras, chat com leitura e melhorias no mapa.',
+    },
+  };
+  const version = versions[req.params.app];
+  if (!version) return res.status(404).json({ error: 'app nao encontrado' });
+  res.json({ ...version, mandatory: false });
+});
 
 // Downloads publicos para instalacao de teste. `res.download` acrescenta
 // Content-Disposition e o nome correto do arquivo, evitando navegadores

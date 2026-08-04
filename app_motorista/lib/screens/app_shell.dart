@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/update_service.dart';
 import 'active_route_screen.dart';
 import 'chat_threads_screen.dart';
 import 'home_screen.dart';
@@ -44,6 +45,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _loadedTabs = List<Widget?>.filled(_tabs.length, null);
     _loadedTabs[_index] = _tabs[_index].screen;
     _refreshUnread();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) UpdateService.check(context);
+    });
     _unreadTimer =
         Timer.periodic(const Duration(minutes: 1), (_) => _refreshUnread());
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/update_service.dart';
 import 'chat_screen.dart';
 import 'children_list_screen.dart';
 import 'location_tab_screen.dart';
@@ -40,6 +41,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _loadedTabs = List<Widget?>.filled(_tabs.length, null);
     _loadedTabs[_index] = _tabs[_index].screen;
     _refreshUnread();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) UpdateService.check(context);
+    });
     // Poll simples -- nao ha push especifico pra "atualizar badge", e o chat
     // ja tem seu proprio WebSocket por thread; isso so mantem o numero do
     // badge razoavelmente atual mesmo em abas que nao sao a de mensagens.

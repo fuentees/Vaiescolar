@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../services/theme_controller.dart';
+import '../services/update_service.dart';
 import 'help_screen.dart';
 import 'privacy_screen.dart';
 
@@ -65,6 +66,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Privacidade e termos'),
             onTap: () => Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => const PrivacyScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.system_update_outlined),
+            title: const Text('Verificar atualização'),
+            onTap: () => UpdateService.check(context, showUpToDate: true),
           ),
           ListTile(
             leading: const Icon(Icons.info_outline),
