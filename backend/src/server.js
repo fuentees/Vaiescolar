@@ -28,6 +28,12 @@ const {
 
 // Alfabeto sem 0/O/1/I para os codigos de convite (evita confusao ao digitar).
 const INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const brasiliaTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
 function generateInviteCode() {
   let code = '';
   for (let i = 0; i < 6; i++) {
@@ -1623,7 +1629,8 @@ app.post('/api/trips/:id/finish', authMiddleware, requireRole('driver', 'admin')
        FROM trips t
        JOIN route_students rs ON rs.route_id=t.route_id
        JOIN students s ON s.id=rs.student_id
-       LEFT JOIN absences ab ON ab.student_id=s.id AND ab.date=t.started_at::date
+       LEFT JOIN absences ab ON ab.student_id=s.id
+        AND ab.date=(t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
       WHERE t.id=$1 AND t.tenant_id=$2 AND t.status='active'
         AND ($3='admin' OR t.driver_user_id=$4)
         AND ab.id IS NULL
@@ -1726,7 +1733,8 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
        FROM trips t
        JOIN route_students rs ON rs.route_id = t.route_id
        JOIN students s ON s.id = rs.student_id
-       LEFT JOIN absences ab ON ab.student_id = s.id AND ab.date = t.started_at::date
+       LEFT JOIN absences ab ON ab.student_id = s.id
+        AND ab.date = (t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
       WHERE t.id = $1 AND t.tenant_id = $2
       ORDER BY rs.position, s.name`,
     [req.params.id, req.auth.tenantId]
@@ -1893,8 +1901,7 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
       if (info.rows.length === 0) return;
       const studentName = info.rows[0].student_name;
       const when = new Date(r.rows[0].at);
-      const hh = String(when.getHours()).padStart(2, '0');
-      const mm = String(when.getMinutes()).padStart(2, '0');
+      const timeBrasilia = brasiliaTimeFormatter.format(when);
       const action = type === 'boarded' ? 'embarcou na van' : 'chegou / desceu';
       const receiver = type === 'dropped' && received_by
         ? `, recebido por ${received_by.trim()}`
@@ -1902,7 +1909,7 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
       return push.sendToUsers(
         info.rows.map((row) => row.guardian_user_id),
         'VaiEscolar',
-        `${studentName} ${action} as ${hh}:${mm}${receiver}`,
+        `${studentName} ${action} às ${timeBrasilia}${receiver}`,
         { type: 'trip_event', tripId: req.params.id, eventType: type, studentId: student_id }
       );
     })
