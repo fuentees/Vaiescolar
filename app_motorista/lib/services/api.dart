@@ -213,6 +213,15 @@ class Api {
     return jsonDecode(res.body) as List<dynamic>;
   }
 
+  static Future<Map<String, dynamic>?> tripStops(String tripId) async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/trips/$tripId/stops'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) return null;
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   static Future<bool> registerEvent({
     required String tripId,
     required String studentId,

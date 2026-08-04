@@ -32,6 +32,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   String? _error;
 
   List<dynamic> _students = [];
+  List<dynamic> _plannedStops = [];
   bool _loadingStudents = false;
   final Set<String> _busyStudentIds = {};
 
@@ -377,12 +378,70 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   Future<void> _loadStudents() async {
     if (_activeTripId == null) return;
     setState(() => _loadingStudents = true);
-    final students = await Api.tripStudents(_activeTripId!);
+    final results = await Future.wait([
+      Api.tripStudents(_activeTripId!),
+      Api.tripStops(_activeTripId!),
+    ]);
+    final students = results[0] as List<dynamic>;
+    final plan = results[1] as Map<String, dynamic>?;
     if (!mounted) return;
     setState(() {
       _students = students;
+      _plannedStops = plan?['stops'] as List<dynamic>? ?? [];
       _loadingStudents = false;
     });
+  }
+
+  Future<void> _showPlannedStops() async {
+    if (_plannedStops.isEmpty) await _loadStudents();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: .78,
+          child: Column(children: [
+            const ListTile(
+              leading: Icon(Icons.route),
+              title: Text('Paradas da rota'),
+              subtitle: Text('Ordem manual preparada para várias escolas'),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _plannedStops.length,
+                itemBuilder: (_, index) {
+                  final stop = _plannedStops[index] as Map<String, dynamic>;
+                  final school = stop['type'] == 'school';
+                  final students = stop['students'] as List<dynamic>? ?? [];
+                  final address = stop['address'] as String?;
+                  return ListTile(
+                    leading: CircleAvatar(child: Text('${index + 1}')),
+                    title: Text(stop['name'] as String? ?? 'Parada'),
+                    subtitle: Text([
+                      if (school)
+                        '${students.length} aluno${students.length == 1 ? '' : 's'}',
+                      if (address != null && address.isNotEmpty) address,
+                    ].join(' • ')),
+                    trailing: address == null || address.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Navegar até esta parada',
+                            icon: const Icon(Icons.navigation_outlined),
+                            onPressed: () {
+                              Navigator.pop(sheetContext);
+                              _navigateTo(address);
+                            },
+                          ),
+                  );
+                },
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   Future<void> _mark(
@@ -847,6 +906,11 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
               const SizedBox(height: 4),
               Text('$boarded de ${_students.length} alunos',
                   style: Theme.of(context).textTheme.bodySmall),
+              TextButton.icon(
+                onPressed: _showPlannedStops,
+                icon: const Icon(Icons.alt_route, size: 18),
+                label: const Text('Ver todas as paradas'),
+              ),
             ],
             if (_error != null) ...[
               const SizedBox(height: 8),
@@ -870,6 +934,12 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                           s['emergency_return_active'] == true;
                       final absent = s['absent'] == true;
                       final address = s['home_address'] as String?;
+                      final schoolName = s['school_name'] as String?;
+                      final schoolAddress = s['school_address'] as String?;
+                      final navigationAddress =
+                          _direction == 'to_school' && status == 'boarded'
+                              ? schoolAddress
+                              : address;
                       final emergencyPhone =
                           s['emergency_contact_phone'] as String?;
                       final busy = _busyStudentIds.contains(id);
@@ -925,6 +995,12 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .bodySmall),
+                                        if (schoolName != null &&
+                                            schoolName.isNotEmpty)
+                                          Text('Escola: $schoolName',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall),
                                       ],
                                     ),
                                   ),
@@ -951,13 +1027,14 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                             child: Text('Abrir WhatsApp')),
                                       ],
                                     ),
-                                  if (address != null &&
-                                      address.trim().isNotEmpty)
+                                  if (navigationAddress != null &&
+                                      navigationAddress.trim().isNotEmpty)
                                     IconButton(
                                       icon:
                                           const Icon(Icons.directions_outlined),
                                       tooltip: 'Navegar ate o endereco',
-                                      onPressed: () => _navigateTo(address),
+                                      onPressed: () =>
+                                          _navigateTo(navigationAddress),
                                     ),
                                   IconButton(
                                     icon: const Icon(Icons.person_add_alt),

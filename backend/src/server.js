@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.12', buildNumber: 4018, releaseBuild: 18,
+      version: '1.0.13', buildNumber: 4019, releaseBuild: 19,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona cancelamento de rota, ocorrências, troca emergencial de veículo e faltas por trajeto.',
+      notes: 'Prepara rotas com várias escolas, agrupando os alunos e exibindo todas as paradas corretas.',
     },
     responsavel: {
-      version: '1.0.12', buildNumber: 4018, releaseBuild: 18,
+      version: '1.0.13', buildNumber: 4019, releaseBuild: 19,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona cancelamento de rota, ocorrências, troca emergencial de veículo e faltas por trajeto.',
+      notes: 'Prepara rotas com várias escolas, agrupando os alunos e exibindo todas as paradas corretas.',
     },
   };
   const version = versions[req.params.app];
@@ -1811,6 +1811,8 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
 app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
   const r = await db.query(
     `SELECT s.id, s.name, s.home_address, s.home_lat, s.home_lng, s.emergency_contact_phone,
+            s.school_id, COALESCE(sc.name, s.school_name) AS school_name,
+            sc.address AS school_address, sc.lat AS school_lat, sc.lng AS school_lng,
             (SELECT te.type FROM trip_events te
               WHERE te.trip_id = $1 AND te.student_id = s.id
               ORDER BY te.at DESC LIMIT 1) AS last_status,
@@ -1822,6 +1824,7 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
        FROM trips t
        JOIN route_students rs ON rs.route_id = t.route_id
        JOIN students s ON s.id = rs.student_id
+       LEFT JOIN schools sc ON sc.id=s.school_id
        LEFT JOIN absences ab ON ab.student_id = s.id
         AND ab.date = (t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
         AND ab.direction IN ('all', t.direction)
@@ -1832,6 +1835,55 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
     [req.params.id, req.auth.tenantId]
   );
   res.json(r.rows);
+});
+
+// Plano de paradas preparado para rotas com uma ou varias escolas. A ordem
+// continua manual: na ida busca os alunos e depois agrupa as escolas; na
+// volta passa pelas escolas e depois entrega os alunos na ordem cadastrada.
+app.get('/api/trips/:id/stops', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const trip = await db.query(
+    `SELECT id, direction FROM trips WHERE id=$1 AND tenant_id=$2
+      AND ($3='admin' OR driver_user_id=$4)`,
+    [req.params.id, req.auth.tenantId, req.auth.role, req.auth.userId]
+  );
+  if (trip.rows.length === 0) return res.status(404).json({ error: 'viagem nao encontrada' });
+  const students = await db.query(
+    `SELECT s.id, s.name, s.home_address, s.home_lat, s.home_lng,
+            s.school_id, COALESCE(sc.name, s.school_name, 'Escola nao informada') AS school_name,
+            sc.address AS school_address, sc.lat AS school_lat, sc.lng AS school_lng,
+            rs.position
+       FROM trips t
+       JOIN route_students rs ON rs.route_id=t.route_id
+       JOIN students s ON s.id=rs.student_id
+       LEFT JOIN schools sc ON sc.id=s.school_id
+       LEFT JOIN absences ab ON ab.student_id=s.id
+        AND ab.date=(t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
+        AND ab.direction IN ('all', t.direction)
+      WHERE t.id=$1 AND t.tenant_id=$2 AND ab.id IS NULL
+      ORDER BY rs.position, s.name`,
+    [req.params.id, req.auth.tenantId]
+  );
+  const homes = students.rows.map((s) => ({
+    type: 'home', student_id: s.id, name: s.name, address: s.home_address,
+    lat: s.home_lat, lng: s.home_lng,
+  }));
+  const schoolMap = new Map();
+  for (const s of students.rows) {
+    const key = s.school_id || `legacy:${s.school_name}`;
+    if (!schoolMap.has(key)) {
+      schoolMap.set(key, {
+        type: 'school', school_id: s.school_id, name: s.school_name,
+        address: s.school_address, lat: s.school_lat, lng: s.school_lng,
+        students: [],
+      });
+    }
+    schoolMap.get(key).students.push({ id: s.id, name: s.name });
+  }
+  const schools = [...schoolMap.values()];
+  const stops = trip.rows[0].direction === 'to_school'
+    ? [...homes, ...schools]
+    : [...schools, ...homes];
+  res.json({ direction: trip.rows[0].direction, school_count: schools.length, stops });
 });
 
 // Reativa o acompanhamento de uma criança que já havia chegado, mudando o
