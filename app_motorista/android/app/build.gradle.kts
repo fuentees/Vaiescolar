@@ -12,6 +12,15 @@ val localProperties = Properties().apply {
     if (file.exists()) file.inputStream().use(::load)
 }
 
+// O APK unificado é compilado por este módulo, mas a chave do Maps foi
+// originalmente configurada no app dos responsáveis. Usa a configuração
+// local antiga como fallback durante a migração, sem copiar ou versionar a
+// chave secreta no repositório.
+val parentLocalProperties = Properties().apply {
+    val file = rootProject.file("../../app_pais/android/local.properties")
+    if (file.exists()) file.inputStream().use(::load)
+}
+
 android {
     namespace = "com.example.app_motorista"
     compileSdk = 36
@@ -33,7 +42,10 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["MAPS_API_KEY"] =
-            localProperties.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY") ?: ""
+            localProperties.getProperty("MAPS_API_KEY")
+                ?: parentLocalProperties.getProperty("MAPS_API_KEY")
+                ?: System.getenv("MAPS_API_KEY")
+                ?: ""
     }
 
     buildTypes {

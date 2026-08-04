@@ -73,14 +73,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.7', buildNumber: 4013, releaseBuild: 13,
+      version: '1.0.8', buildNumber: 4014, releaseBuild: 14,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Buscas, checklist da rota, WhatsApp, desfazer marcação e melhorias de usabilidade.',
+      notes: 'Corrige o carregamento do Google Maps no aplicativo unificado.',
     },
     responsavel: {
-      version: '1.0.7', buildNumber: 4013, releaseBuild: 13,
+      version: '1.0.8', buildNumber: 4014, releaseBuild: 14,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Buscas, checklist da rota, WhatsApp, desfazer marcação e melhorias de usabilidade.',
+      notes: 'Corrige o carregamento do Google Maps no aplicativo unificado.',
     },
   };
   const version = versions[req.params.app];

@@ -373,10 +373,12 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
               ],
             ),
           ),
-          Card(
-            margin: const EdgeInsets.all(16),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          SafeArea(
+            top: false,
+            minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Card(
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -435,6 +437,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
                 ],
               ),
             ),
+          ),
           ),
         ],
       ),
