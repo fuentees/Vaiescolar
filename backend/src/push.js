@@ -7,6 +7,13 @@ const db = require('./db');
 let firebaseApp = null;
 let warnedMissingCredentials = false;
 
+function isConfigured() {
+  return Boolean(
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+      process.env.GOOGLE_APPLICATION_CREDENTIALS
+  );
+}
+
 // No Render nao existe um arquivo persistente de service account. Por isso
 // aceita tambem o JSON inteiro em FIREBASE_SERVICE_ACCOUNT_JSON.
 function getFirebaseApp() {
@@ -69,4 +76,4 @@ async function sendToUsers(userIds, title, body, data = {}) {
   }
 }
 
-module.exports = { sendToUsers };
+module.exports = { sendToUsers, isConfigured };

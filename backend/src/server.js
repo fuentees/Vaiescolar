@@ -56,16 +56,28 @@ const app = express();
 // web administrativo que precise ser restrito a uma origem especifica.
 app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*' }));
 app.use(express.json());
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', async (_req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({
+      ok: true,
+      database: 'connected',
+      pushNotifications: push.isConfigured() ? 'configured' : 'not_configured',
+    });
+  } catch (error) {
+    console.error('[health] banco indisponivel', error.message);
+    res.status(503).json({ ok: false, database: 'unavailable' });
+  }
+});
 app.get('/app-version/:app', (req, res) => {
   const versions = {
     motorista: {
-      version: '0.2.0', buildNumber: 2,
+      version: '0.2.1', buildNumber: 3,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Motorista.apk',
       notes: 'Notificações sonoras, chat com leitura e melhorias no mapa.',
     },
     responsavel: {
-      version: '0.2.0', buildNumber: 2,
+      version: '0.2.1', buildNumber: 3,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Responsavel.zip',
       notes: 'Notificações sonoras, chat com leitura e melhorias no mapa.',
     },
@@ -331,9 +343,10 @@ app.post('/api/auth/register-parent', async (req, res) => {
     );
     const userId = u.rows[0].id;
     await client.query(
-      `INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id)
-       VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-      [invite.tenant_id, invite.student_id, userId]
+      `INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id, relationship)
+       VALUES($1,$2,$3,$4) ON CONFLICT (student_id, guardian_user_id)
+       DO UPDATE SET relationship=EXCLUDED.relationship`,
+      [invite.tenant_id, invite.student_id, userId, invite.relationship]
     );
     await client.query(
       'UPDATE guardian_invites SET used_by_user_id=$1 WHERE id=$2',
@@ -388,9 +401,10 @@ app.post('/api/auth/link-child', authMiddleware, requireRole('parent'), async (r
     }
 
     await client.query(
-      `INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id)
-       VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-      [invite.tenant_id, invite.student_id, req.auth.userId]
+      `INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id, relationship)
+       VALUES($1,$2,$3,$4) ON CONFLICT (student_id, guardian_user_id)
+       DO UPDATE SET relationship=EXCLUDED.relationship`,
+      [invite.tenant_id, invite.student_id, req.auth.userId, invite.relationship]
     );
     await client.query(
       'UPDATE guardian_invites SET used_by_user_id=$1 WHERE id=$2',
@@ -710,7 +724,7 @@ app.get('/api/students/:id', authMiddleware, async (req, res) => {
   if (s.rows.length === 0) return res.status(404).json({ error: 'aluno nao encontrado' });
 
   const guardians = await db.query(
-    `SELECT u.id, u.name, u.email, u.phone
+    `SELECT u.id, u.name, u.email, u.phone, sg.relationship
        FROM student_guardians sg
        JOIN users u ON u.id = sg.guardian_user_id
       WHERE sg.student_id=$1 AND sg.tenant_id=$2
@@ -830,6 +844,11 @@ app.delete('/api/vehicles/:id', authMiddleware, requireRole('admin'), async (req
 // aluno se auto-cadastrar via POST /api/auth/register-parent. O app do
 // motorista mostra esse codigo grande + QR na tela "Convidar responsavel".
 app.post('/api/students/:id/invite', authMiddleware, requireRole('admin'), async (req, res) => {
+  const relationship = String(req.body.relationship || 'Responsavel legal').trim();
+  const allowedRelationships = ['Mae', 'Pai', 'Avo', 'Tio ou tia', 'Responsavel legal', 'Outro'];
+  if (!allowedRelationships.includes(relationship)) {
+    return res.status(400).json({ error: 'parentesco invalido' });
+  }
   const st = await db.query(
     'SELECT id FROM students WHERE id=$1 AND tenant_id=$2',
     [req.params.id, req.auth.tenantId]
@@ -841,9 +860,9 @@ app.post('/api/students/:id/invite', authMiddleware, requireRole('admin'), async
     const code = generateInviteCode();
     try {
       const r = await db.query(
-        `INSERT INTO guardian_invites(tenant_id, student_id, code, expires_at)
-         VALUES($1,$2,$3,$4) RETURNING code, expires_at`,
-        [req.auth.tenantId, req.params.id, code, expiresAt]
+        `INSERT INTO guardian_invites(tenant_id, student_id, code, relationship, expires_at)
+         VALUES($1,$2,$3,$4,$5) RETURNING code, relationship, expires_at`,
+        [req.auth.tenantId, req.params.id, code, relationship, expiresAt]
       );
       return res.json(r.rows[0]);
     } catch (e) {
@@ -932,6 +951,11 @@ app.delete('/api/routes/:id/students/:studentId', authMiddleware, requireRole('a
 // Vincula um responsavel (user parent) a um aluno.
 app.post('/api/students/:id/guardians', authMiddleware, requireRole('admin'), async (req, res) => {
   const { guardian_user_id } = req.body;
+  const relationship = String(req.body.relationship || 'Responsavel legal').trim();
+  const allowedRelationships = ['Mae', 'Pai', 'Avo', 'Tio ou tia', 'Responsavel legal', 'Outro'];
+  if (!allowedRelationships.includes(relationship)) {
+    return res.status(400).json({ error: 'parentesco invalido' });
+  }
   const st = await db.query(
     'SELECT id FROM students WHERE id=$1 AND tenant_id=$2',
     [req.params.id, req.auth.tenantId]
@@ -943,9 +967,10 @@ app.post('/api/students/:id/guardians', authMiddleware, requireRole('admin'), as
   );
   if (g.rows.length === 0) return res.status(404).json({ error: 'responsavel nao encontrado' });
   await db.query(
-    `INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id)
-     VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-    [req.auth.tenantId, req.params.id, guardian_user_id]
+    `INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id, relationship)
+     VALUES($1,$2,$3,$4) ON CONFLICT (student_id, guardian_user_id)
+     DO UPDATE SET relationship=EXCLUDED.relationship`,
+    [req.auth.tenantId, req.params.id, guardian_user_id, relationship]
   );
   res.json({ ok: true });
 });

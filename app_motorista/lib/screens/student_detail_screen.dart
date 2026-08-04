@@ -141,6 +141,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                                 ),
                                 title: Text(g['name'] as String),
                                 subtitle: Text([
+                                  (g['relationship'] as String?) ??
+                                      'Responsável legal',
                                   g['email'] as String,
                                   if ((g['phone'] as String?)?.isNotEmpty ==
                                       true)

@@ -21,6 +21,7 @@ class _InviteScreenState extends State<InviteScreen> {
   DateTime? _expiresAt;
   bool _loading = true;
   String? _error;
+  String _relationship = 'Responsavel legal';
 
   @override
   void initState() {
@@ -33,7 +34,7 @@ class _InviteScreenState extends State<InviteScreen> {
       _loading = true;
       _error = null;
     });
-    final result = await Api.generateInvite(widget.studentId);
+    final result = await Api.generateInvite(widget.studentId, _relationship);
     if (result == null) {
       setState(() {
         _loading = false;
@@ -70,6 +71,31 @@ class _InviteScreenState extends State<InviteScreen> {
                           '"Tenho um codigo" e digitar:',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          initialValue: _relationship,
+                          decoration: const InputDecoration(
+                            labelText: 'Parentesco com o aluno',
+                          ),
+                          items: const [
+                            'Mae',
+                            'Pai',
+                            'Avo',
+                            'Tio ou tia',
+                            'Responsavel legal',
+                            'Outro',
+                          ]
+                              .map((value) => DropdownMenuItem(
+                                    value: value,
+                                    child: Text(value),
+                                  ))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _relationship = value);
+                            }
+                          },
                         ),
                         const SizedBox(height: 24),
                         Container(

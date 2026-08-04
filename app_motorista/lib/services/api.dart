@@ -205,10 +205,15 @@ class Api {
   }
 
   /// Gera um codigo de convite (7 dias) para o responsavel do aluno.
-  static Future<Map<String, dynamic>?> generateInvite(String studentId) async {
+  static Future<Map<String, dynamic>?> generateInvite(
+      String studentId, String relationship) async {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/students/$studentId/invite'),
-      headers: {'authorization': 'Bearer $_token'},
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json',
+      },
+      body: jsonEncode({'relationship': relationship}),
     );
     if (res.statusCode != 200) return null;
     return jsonDecode(res.body) as Map<String, dynamic>;
