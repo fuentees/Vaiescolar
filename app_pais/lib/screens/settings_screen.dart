@@ -25,7 +25,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadVersion() async {
     final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
-    setState(() => _version = '${info.version} (build ${info.buildNumber})');
+    final rawBuild = int.tryParse(info.buildNumber) ?? 0;
+    final build = rawBuild >= 1000 ? rawBuild % 1000 : rawBuild;
+    setState(() => _version = '${info.version} (build $build)');
   }
 
   @override
