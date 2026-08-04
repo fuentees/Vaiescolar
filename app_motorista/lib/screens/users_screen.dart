@@ -15,6 +15,7 @@ class UsersScreen extends StatefulWidget {
 class _UsersScreenState extends State<UsersScreen> {
   List<dynamic> _users = [];
   bool _loading = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -92,9 +93,11 @@ class _UsersScreenState extends State<UsersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final admins = _users.where((u) => u['role'] == 'admin').toList();
-    final drivers = _users.where((u) => u['role'] == 'driver').toList();
-    final parents = _users.where((u) => u['role'] == 'parent').toList();
+    final visible = _users.where((u) => '${u['name']} ${u['email']} ${u['phone'] ?? ''}'
+        .toLowerCase().contains(_query.trim().toLowerCase())).toList();
+    final admins = visible.where((u) => u['role'] == 'admin').toList();
+    final drivers = visible.where((u) => u['role'] == 'driver').toList();
+    final parents = visible.where((u) => u['role'] == 'parent').toList();
 
     Widget buildTile(dynamic u) => _UserTile(
           user: u,
@@ -105,7 +108,13 @@ class _UsersScreenState extends State<UsersScreen> {
         );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Equipe e responsaveis')),
+      appBar: AppBar(title: const Text('Equipe e responsáveis'), bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: TextField(
+          onChanged: (value) => setState(() => _query = value),
+          decoration: const InputDecoration(hintText: 'Buscar nome, e-mail ou telefone...', prefixIcon: Icon(Icons.search), isDense: true),
+        )),
+      )),
       floatingActionButton: FloatingActionButton(
         onPressed: _openAddDialog,
         child: const Icon(Icons.person_add),
@@ -114,7 +123,7 @@ class _UsersScreenState extends State<UsersScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _users.isEmpty
+              child: visible.isEmpty
                   ? ListView(children: const [
                       Padding(
                         padding: EdgeInsets.all(32),

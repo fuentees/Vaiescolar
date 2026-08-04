@@ -215,6 +215,13 @@ async function executeTrip(direction, points) {
   }, driverToken);
   assert.equal(repeatedBoarding.alreadyRecorded, true);
 
+  const corrected = await json('DELETE',
+    `/api/trips/${tripId}/students/${studentId}/last-event`, undefined, driverToken);
+  assert.equal(corrected.ok, true);
+  await json('POST', `/api/trips/${tripId}/events`, {
+    student_id: studentId, type: 'boarded', lat: points.first[0], lng: points.first[1],
+  }, driverToken);
+
   const droppedPromise = nextSocketMessage(ws, 'event');
   await json('POST', `/api/trips/${tripId}/locations`, {
     lat: points.last[0], lng: points.last[1], speed: 0, heading: 90, accuracy: 5,

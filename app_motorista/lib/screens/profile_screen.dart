@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_pais/services/host_actions.dart';
 import '../services/api.dart';
+import '../services/remembered_login.dart';
 import '../theme.dart';
 import 'device_status_screen.dart';
 import 'login_screen.dart';
@@ -98,21 +99,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    final confirmed = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Sair da conta?'),
+        content: const Text('Você pode manter o login salvo para entrar mais rápido depois.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context),
               child: const Text('Cancelar')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'forget'),
+              child: const Text('Sair e apagar login')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, 'keep'),
               child: const Text('Sair')),
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (choice == null) return;
+    if (choice == 'forget') await RememberedLogin.clear();
     await Api.logout();
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(

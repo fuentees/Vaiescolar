@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api.dart';
 import '../services/tracking_service.dart';
@@ -90,6 +92,13 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   Future<void> _call(String phone) async {
     final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
     await launchUrl(Uri.parse('tel:$digits'),
+        mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _openWhatsApp(String phone) async {
+    var digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 10 || digits.length == 11) digits = '55$digits';
+    await launchUrl(Uri.parse('https://wa.me/$digits'),
         mode: LaunchMode.externalApplication);
   }
 
@@ -195,6 +204,42 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
         _error =
             'Esta rota nao tem nenhum aluno vinculado. Adicione alunos em Gestao > Rotas antes de iniciar.';
       });
+      return;
+    }
+    final gpsEnabled = await Geolocator.isLocationServiceEnabled();
+    final connections = await Connectivity().checkConnectivity();
+    final online = !connections.contains(ConnectivityResult.none);
+    if (!mounted) return;
+    if (!gpsEnabled || !online) {
+      setState(() {
+        _busy = false;
+        _error = !gpsEnabled
+            ? 'O GPS está desligado. Ative a Localização antes de iniciar.'
+            : 'Sem conexão com a internet. Conecte-se antes de iniciar a rota.';
+      });
+      return;
+    }
+    final route = _routes.firstWhere((r) => r['id'] == _routeId, orElse: () => null);
+    final vehicle = _vehicles.firstWhere((v) => v['id'] == _vehicleId, orElse: () => null);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Checklist antes da saída'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ListTile(leading: Icon(Icons.gps_fixed, color: AppColors.success), title: Text('GPS ativado')),
+          const ListTile(leading: Icon(Icons.wifi, color: AppColors.success), title: Text('Internet conectada')),
+          ListTile(leading: const Icon(Icons.route), title: Text(route?['name'] as String? ?? 'Rota selecionada')),
+          ListTile(leading: const Icon(Icons.directions_bus), title: Text(vehicle?['plate'] as String? ?? 'Veículo padrão da rota')),
+          ListTile(leading: const Icon(Icons.groups), title: Text('${linkedStudents.length} alunos na rota')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Revisar')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Iniciar rota')),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      if (mounted) setState(() => _busy = false);
       return;
     }
     final tripId =
@@ -324,6 +369,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
 
   Future<void> _mark(
       String studentId, String name, String type, String? currentStatus) async {
+    final activeTripId = _activeTripId;
+    if (activeTripId == null) return;
     String? receivedBy;
     // So confirma no caso de pular etapa (desembarque sem embarque
     // registrado) -- embarque normal na primeira marcacao nao precisa.
@@ -382,13 +429,33 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     }
     setState(() => _busyStudentIds.add(studentId));
     final ok = await Api.registerEvent(
-        tripId: _activeTripId!,
+        tripId: activeTripId,
         studentId: studentId,
         type: type,
         receivedBy: receivedBy);
     if (ok) {
+      HapticFeedback.mediumImpact();
+      SystemSound.play(SystemSoundType.click);
       await _loadStudents();
       await TrackingService.refreshProximityStops();
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(type == 'boarded'
+              ? '$name marcado como embarcado.'
+              : 'Desembarque de $name confirmado.'),
+          action: SnackBarAction(
+            label: 'Desfazer',
+            onPressed: () async {
+              final undone = await Api.undoLastEvent(activeTripId, studentId);
+              if (undone) {
+                await _loadStudents();
+                await TrackingService.refreshProximityStops();
+              }
+            },
+          ),
+        ));
+      }
     }
     if (!mounted) return;
     setState(() => _busyStudentIds.remove(studentId));
@@ -652,11 +719,17 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                   ),
                                   if (emergencyPhone != null &&
                                       emergencyPhone.trim().isNotEmpty)
-                                    IconButton(
-                                      icon: const Icon(Icons.phone_outlined),
-                                      tooltip:
-                                          'Ligar para o contato de emergencia',
-                                      onPressed: () => _call(emergencyPhone),
+                                    PopupMenuButton<String>(
+                                      tooltip: 'Contatar responsável',
+                                      icon: const Icon(Icons.contact_phone_outlined),
+                                      onSelected: (value) {
+                                        if (value == 'call') _call(emergencyPhone);
+                                        if (value == 'whatsapp') _openWhatsApp(emergencyPhone);
+                                      },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(value: 'call', child: Text('Ligar')),
+                                        PopupMenuItem(value: 'whatsapp', child: Text('Abrir WhatsApp')),
+                                      ],
                                     ),
                                   if (address != null &&
                                       address.trim().isNotEmpty)

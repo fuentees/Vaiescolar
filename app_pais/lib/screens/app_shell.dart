@@ -48,7 +48,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // ja tem seu proprio WebSocket por thread; isso so mantem o numero do
     // badge razoavelmente atual mesmo em abas que nao sao a de mensagens.
     _unreadTimer =
-        Timer.periodic(const Duration(minutes: 1), (_) => _refreshUnread());
+        Timer.periodic(const Duration(seconds: 15), (_) => _refreshUnread());
   }
 
   @override

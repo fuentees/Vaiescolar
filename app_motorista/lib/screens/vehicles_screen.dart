@@ -13,6 +13,7 @@ class VehiclesScreen extends StatefulWidget {
 class _VehiclesScreenState extends State<VehiclesScreen> {
   List<dynamic> _vehicles = [];
   bool _loading = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -64,8 +65,17 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visible = _vehicles.where((v) => '${v['plate']} ${v['model'] ?? ''}'
+        .toLowerCase().contains(_query.trim().toLowerCase())).toList()
+      ..sort((a, b) => (a['plate'] as String).compareTo(b['plate'] as String));
     return Scaffold(
-      appBar: AppBar(title: const Text('Veiculos')),
+      appBar: AppBar(title: const Text('Veículos'), bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: TextField(
+          onChanged: (value) => setState(() => _query = value),
+          decoration: const InputDecoration(hintText: 'Buscar placa ou modelo...', prefixIcon: Icon(Icons.search), isDense: true),
+        )),
+      )),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
         child: const Icon(Icons.add),
@@ -74,7 +84,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _vehicles.isEmpty
+              child: visible.isEmpty
                   ? ListView(children: const [
                       Padding(
                         padding: EdgeInsets.all(32),
@@ -85,9 +95,9 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                       ),
                     ])
                   : ListView.builder(
-                      itemCount: _vehicles.length,
+                      itemCount: visible.length,
                       itemBuilder: (context, i) {
-                        final v = _vehicles[i] as Map<String, dynamic>;
+                        final v = visible[i] as Map<String, dynamic>;
                         final model = v['model'] as String?;
                         final capacity = v['capacity'];
                         final year = v['year'];

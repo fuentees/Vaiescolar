@@ -49,7 +49,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       if (mounted) UpdateService.check(context);
     });
     _unreadTimer =
-        Timer.periodic(const Duration(minutes: 1), (_) => _refreshUnread());
+        Timer.periodic(const Duration(seconds: 15), (_) => _refreshUnread());
   }
 
   @override

@@ -15,6 +15,7 @@ class StudentsScreen extends StatefulWidget {
 class _StudentsScreenState extends State<StudentsScreen> {
   List<dynamic> _students = [];
   bool _loading = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -65,8 +66,30 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visible = _students.where((item) {
+      final student = item as Map<String, dynamic>;
+      final text = '${student['name']} ${student['school_display_name'] ?? student['school_name'] ?? ''}'.toLowerCase();
+      return text.contains(_query.trim().toLowerCase());
+    }).toList()
+      ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
     return Scaffold(
-      appBar: AppBar(title: const Text('Alunos')),
+      appBar: AppBar(
+        title: const Text('Alunos'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: TextField(
+              onChanged: (value) => setState(() => _query = value),
+              decoration: const InputDecoration(
+                hintText: 'Buscar aluno ou escola...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
+          ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openStudentForm(),
         child: const Icon(Icons.add),
@@ -75,7 +98,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _students.isEmpty
+              child: visible.isEmpty
                   ? ListView(children: const [
                       Padding(
                         padding: EdgeInsets.all(32),
@@ -86,9 +109,9 @@ class _StudentsScreenState extends State<StudentsScreen> {
                       ),
                     ])
                   : ListView.builder(
-                      itemCount: _students.length,
+                      itemCount: visible.length,
                       itemBuilder: (context, i) {
-                        final s = _students[i] as Map<String, dynamic>;
+                        final s = visible[i] as Map<String, dynamic>;
                         final school = (s['school_display_name'] ??
                             s['school_name']) as String?;
                         return Card(

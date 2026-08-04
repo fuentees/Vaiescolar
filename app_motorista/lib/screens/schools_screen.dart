@@ -14,6 +14,7 @@ class SchoolsScreen extends StatefulWidget {
 class _SchoolsScreenState extends State<SchoolsScreen> {
   List<dynamic> _schools = [];
   bool _loading = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -46,8 +47,30 @@ class _SchoolsScreenState extends State<SchoolsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visible = _schools.where((item) {
+      final school = item as Map<String, dynamic>;
+      return '${school['name']} ${school['address'] ?? ''}'
+          .toLowerCase().contains(_query.trim().toLowerCase());
+    }).toList()
+      ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
     return Scaffold(
-      appBar: AppBar(title: const Text('Escolas')),
+      appBar: AppBar(
+        title: const Text('Escolas'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: TextField(
+              onChanged: (value) => setState(() => _query = value),
+              decoration: const InputDecoration(
+                hintText: 'Buscar escola ou endereço...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
+          ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _openAddDialog,
         child: const Icon(Icons.add),
@@ -56,7 +79,7 @@ class _SchoolsScreenState extends State<SchoolsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _schools.isEmpty
+              child: visible.isEmpty
                   ? ListView(children: const [
                       Padding(
                         padding: EdgeInsets.all(32),
@@ -67,9 +90,9 @@ class _SchoolsScreenState extends State<SchoolsScreen> {
                       ),
                     ])
                   : ListView.builder(
-                      itemCount: _schools.length,
+                      itemCount: visible.length,
                       itemBuilder: (context, i) {
-                        final s = _schools[i];
+                        final s = visible[i];
                         final address = s['address'] as String?;
                         return Card(
                           margin: const EdgeInsets.symmetric(

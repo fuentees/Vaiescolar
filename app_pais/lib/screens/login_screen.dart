@@ -38,16 +38,25 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    final email = _email.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      setState(() => _error = 'Digite um e-mail válido.');
+      return;
+    }
+    if (_pass.text.isEmpty) {
+      setState(() => _error = 'Digite sua senha.');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
-    final ok = await Api.login(_email.text.trim(), _pass.text);
+    final ok = await Api.login(email, _pass.text);
     if (!mounted) return;
     setState(() => _loading = false);
     if (ok) {
       if (_remember) {
-        await RememberedLogin.save(_email.text.trim(), _pass.text);
+        await RememberedLogin.save(email, _pass.text);
       } else {
         await RememberedLogin.clear();
       }

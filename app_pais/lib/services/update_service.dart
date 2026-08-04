@@ -42,7 +42,9 @@ class UpdateService {
           title: const Text('Nova versão disponível'),
           content: Text(
             'Instalada: ${current.version}\n'
-            'Disponível: ${latest['version']}\n\n${latest['notes']}',
+            'Disponível: ${latest['version']}\n'
+            'Tamanho aproximado: 27 MB\n\n${latest['notes']}\n\n'
+            'O progresso aparecerá no gerenciador de downloads do celular.',
           ),
           actions: [
             if (latest['mandatory'] != true)

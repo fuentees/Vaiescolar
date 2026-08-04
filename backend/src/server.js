@@ -73,14 +73,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.6', buildNumber: 4012, releaseBuild: 12,
+      version: '1.0.7', buildNumber: 4013, releaseBuild: 13,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Opção segura para lembrar e-mail e senha e menus do aplicativo em português.',
+      notes: 'Buscas, checklist da rota, WhatsApp, desfazer marcação e melhorias de usabilidade.',
     },
     responsavel: {
-      version: '1.0.6', buildNumber: 4012, releaseBuild: 12,
+      version: '1.0.7', buildNumber: 4013, releaseBuild: 13,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Opção segura para lembrar e-mail e senha e menus do aplicativo em português.',
+      notes: 'Buscas, checklist da rota, WhatsApp, desfazer marcação e melhorias de usabilidade.',
     },
   };
   const version = versions[req.params.app];
@@ -1892,6 +1892,33 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
     .catch((e) => console.error('[push] falha ao notificar evento', e.message));
 
   res.json(r.rows[0]);
+});
+
+// Corrige o último toque feito por engano enquanto a viagem ainda está ativa.
+// Só o evento mais recente daquele aluno pode ser removido, evitando reescrever
+// silenciosamente um histórico antigo ou já finalizado.
+app.delete('/api/trips/:id/students/:studentId/last-event', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const removed = await db.query(
+    `DELETE FROM trip_events te
+      USING trips t
+      WHERE te.id = (
+        SELECT last_te.id FROM trip_events last_te
+         WHERE last_te.trip_id=$1 AND last_te.student_id=$2 AND last_te.tenant_id=$3
+         ORDER BY last_te.at DESC LIMIT 1
+      )
+        AND te.trip_id=t.id AND t.id=$1 AND t.tenant_id=$3 AND t.status='active'
+        AND ($4='admin' OR t.driver_user_id=$5)
+      RETURNING te.*`,
+    [req.params.id, req.params.studentId, req.auth.tenantId, req.auth.role, req.auth.userId]
+  );
+  if (removed.rows.length === 0) {
+    return res.status(404).json({ error: 'evento recente nao encontrado' });
+  }
+  hub.broadcast(req.params.id, {
+    type: 'event_corrected', tripId: req.params.id,
+    studentId: req.params.studentId, removedEventId: removed.rows[0].id,
+  });
+  res.json({ ok: true, removed: removed.rows[0] });
 });
 
 // Eventos (embarque/desembarque) de uma viagem, em ordem cronologica —

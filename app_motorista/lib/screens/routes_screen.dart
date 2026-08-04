@@ -14,6 +14,7 @@ class RoutesScreen extends StatefulWidget {
 class _RoutesScreenState extends State<RoutesScreen> {
   List<dynamic> _routes = [];
   bool _loading = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -63,8 +64,17 @@ class _RoutesScreenState extends State<RoutesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visible = _routes.where((r) => (r['name'] as String)
+        .toLowerCase().contains(_query.trim().toLowerCase())).toList()
+      ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
     return Scaffold(
-      appBar: AppBar(title: const Text('Rotas')),
+      appBar: AppBar(title: const Text('Rotas'), bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: TextField(
+          onChanged: (value) => setState(() => _query = value),
+          decoration: const InputDecoration(hintText: 'Buscar rota...', prefixIcon: Icon(Icons.search), isDense: true),
+        )),
+      )),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
         child: const Icon(Icons.add),
@@ -73,7 +83,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _routes.isEmpty
+              child: visible.isEmpty
                   ? ListView(children: const [
                       Padding(
                         padding: EdgeInsets.all(32),
@@ -84,9 +94,9 @@ class _RoutesScreenState extends State<RoutesScreen> {
                       ),
                     ])
                   : ListView.builder(
-                      itemCount: _routes.length,
+                      itemCount: visible.length,
                       itemBuilder: (context, i) {
-                        final r = _routes[i] as Map<String, dynamic>;
+                        final r = visible[i] as Map<String, dynamic>;
                         final active = r['active'] as bool? ?? true;
                         final toSchool = r['planned_time_to_school'] as String?;
                         final toHome = r['planned_time_to_home'] as String?;

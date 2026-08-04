@@ -200,6 +200,14 @@ class Api {
     return res.statusCode == 200;
   }
 
+  static Future<bool> undoLastEvent(String tripId, String studentId) async {
+    final res = await http.delete(
+      Uri.parse('${Config.apiBase}/api/trips/$tripId/students/$studentId/last-event'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    return res.statusCode == 200;
+  }
+
   static Future<bool> sendApproachingAlert(
       String tripId, String studentId) async {
     final res = await http.post(
