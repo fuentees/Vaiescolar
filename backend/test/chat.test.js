@@ -40,6 +40,8 @@ before(async () => {
   const login = await post('/api/auth/login', { email: `parent-chat-${suffix}@test.local`, password: 'senha123' }).then((r) => r.json());
   parentToken = login.token;
   parentUserId = login.userId;
+  const student = await post('/api/students', { name: 'Aluno da Familia Chat' }, adminToken).then((r) => r.json());
+  await post(`/api/students/${student.id}/guardians`, { guardian_user_id: parentUserId }, adminToken);
 });
 
 after(async () => {
@@ -80,4 +82,5 @@ test('GET /api/chat/threads inclui unread_count pro admin', async () => {
   const thread = threads.find((t) => t.parent_user_id === parentUserId);
   assert.ok(thread, 'thread do pai deveria aparecer');
   assert.ok(Number(thread.unread_count) >= 1);
+  assert.equal(thread.student_names, 'Aluno da Familia Chat');
 });

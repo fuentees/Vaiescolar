@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'invite_screen.dart';
+import 'chat_screen.dart';
 
 const _monthNames = [
   'Jan',
@@ -145,6 +146,19 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                                       true)
                                     g['phone'] as String,
                                 ].join(' · ')),
+                                trailing: IconButton(
+                                  tooltip: 'Conversar com responsável',
+                                  icon: const Icon(Icons.chat_bubble_outline),
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatScreen(
+                                        parentUserId: g['id'] as String,
+                                        parentName:
+                                            '${g['name']} • ${s['name']}',
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             )),
                       const SizedBox(height: 20),

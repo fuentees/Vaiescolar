@@ -436,6 +436,10 @@ async function resolveChatParentId(req, res) {
 app.get('/api/chat/threads', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
   const r = await db.query(
     `SELECT u.id AS parent_user_id, u.name AS parent_name,
+            (SELECT string_agg(s.name, ', ' ORDER BY s.name)
+               FROM student_guardians sg
+               JOIN students s ON s.id=sg.student_id
+              WHERE sg.guardian_user_id=u.id AND sg.tenant_id=$1) AS student_names,
             (SELECT body FROM chat_messages cm
               WHERE cm.tenant_id = $1 AND cm.parent_user_id = u.id
               ORDER BY cm.created_at DESC LIMIT 1) AS last_message,

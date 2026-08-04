@@ -5,7 +5,7 @@ import 'chat_screen.dart';
 
 /// Lista uma thread por responsavel do tenant, com a ultima mensagem e um
 /// badge de nao lidas — o motorista/admin escolhe com quem falar. Tem busca
-/// por nome pra tenants com muitos responsaveis.
+/// por nome do aluno ou do responsavel pra tenants com muitas familias.
 class ChatThreadsScreen extends StatefulWidget {
   const ChatThreadsScreen({super.key});
   @override
@@ -37,7 +37,7 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> {
     final filtered = _query.trim().isEmpty
         ? _threads
         : _threads
-            .where((t) => (t['parent_name'] as String)
+            .where((t) => '${t['parent_name']} ${t['student_names'] ?? ''}'
                 .toLowerCase()
                 .contains(_query.toLowerCase()))
             .toList();
@@ -46,18 +46,17 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> {
       appBar: AppBar(title: const Text('Mensagens')),
       body: Column(
         children: [
-          if (_threads.length > 5)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Buscar responsavel...',
-                  prefixIcon: Icon(Icons.search),
-                  isDense: true,
-                ),
-                onChanged: (v) => setState(() => _query = v),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Buscar aluno ou responsável...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
               ),
+              onChanged: (v) => setState(() => _query = v),
             ),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -81,17 +80,24 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> {
                             itemBuilder: (context, i) {
                               final t = filtered[i];
                               final lastMessage = t['last_message'] as String?;
+                              final students =
+                                  t['student_names'] as String? ?? '';
                               final unread =
                                   (t['unread_count'] as num?)?.toInt() ?? 0;
                               return ListTile(
                                 leading: const CircleAvatar(
                                     child: Icon(Icons.person)),
-                                title: Text(t['parent_name'] as String),
+                                title: Text(students.isNotEmpty
+                                    ? students
+                                    : t['parent_name'] as String),
                                 subtitle: Text(
-                                  lastMessage ?? 'Nenhuma mensagem ainda',
-                                  maxLines: 1,
+                                  students.isNotEmpty
+                                      ? 'Responsável: ${t['parent_name']}\n${lastMessage ?? 'Nenhuma mensagem ainda'}'
+                                      : lastMessage ?? 'Nenhuma mensagem ainda',
+                                  maxLines: students.isNotEmpty ? 2 : 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                isThreeLine: students.isNotEmpty,
                                 trailing: unread > 0
                                     ? CircleAvatar(
                                         radius: 11,
@@ -110,7 +116,9 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> {
                                       builder: (_) => ChatScreen(
                                         parentUserId:
                                             t['parent_user_id'] as String,
-                                        parentName: t['parent_name'] as String,
+                                        parentName: students.isNotEmpty
+                                            ? '${t['parent_name']} • $students'
+                                            : t['parent_name'] as String,
                                       ),
                                     ),
                                   );
