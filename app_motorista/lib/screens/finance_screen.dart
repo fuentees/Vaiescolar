@@ -149,6 +149,40 @@ class _FinanceScreenState extends State<FinanceScreen> {
     await Share.share(buffer.toString(), subject: 'Financeiro - $_monthLabel');
   }
 
+  Future<void> _configureProvider() async {
+    final current = await Api.paymentProvider();
+    if (!mounted) return;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _PaymentProviderDialog(current: current),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Forma de recebimento configurada com segurança.'),
+      ));
+    }
+  }
+
+  Future<void> _createCheckout(Map<String, dynamic> payment) async {
+    final result = await Api.createPaymentCheckout(payment['id'] as String);
+    if (!mounted) return;
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Não foi possível gerar. Confira a configuração.'),
+      ));
+      return;
+    }
+    final link = result['checkout_url'] as String?;
+    final pix = result['pix_key'] as String?;
+    final value = link ?? pix;
+    if (value == null) return;
+    await Share.share(
+      '${link != null ? 'Link de pagamento' : 'Chave PIX'} do transporte escolar de ${payment['student_name']}: $value',
+      subject: 'Cobrança de transporte escolar',
+    );
+    _load();
+  }
+
   bool get _isOverdue {
     final now = DateTime.now();
     return _month.isBefore(DateTime(now.year, now.month, 1));
@@ -175,6 +209,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
       appBar: AppBar(
         title: const Text('Financeiro'),
         actions: [
+          IconButton(
+              icon: const Icon(Icons.account_balance_outlined),
+              tooltip: 'Configurar recebimentos',
+              onPressed: _configureProvider),
           IconButton(
               icon: const Icon(Icons.ios_share),
               tooltip: 'Exportar CSV',
@@ -318,6 +356,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                       : AppColors.accent),
                             ),
                             onSelected: (v) {
+                              if (v == 'checkout') {
+                                _createCheckout(p as Map<String, dynamic>);
+                              }
                               if (v == 'pay') {
                                 _markAsPaid(p as Map<String, dynamic>);
                               }
@@ -326,6 +367,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               }
                             },
                             itemBuilder: (context) => [
+                              if (!paid)
+                                const PopupMenuItem(
+                                    value: 'checkout',
+                                    child: Text('Gerar link / PIX')),
                               if (!paid)
                                 const PopupMenuItem(
                                     value: 'pay',
@@ -341,6 +386,130 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _PaymentProviderDialog extends StatefulWidget {
+  final Map<String, dynamic> current;
+  const _PaymentProviderDialog({required this.current});
+
+  @override
+  State<_PaymentProviderDialog> createState() => _PaymentProviderDialogState();
+}
+
+class _PaymentProviderDialogState extends State<_PaymentProviderDialog> {
+  late String _provider;
+  late final TextEditingController _pix;
+  late final TextEditingController _merchant;
+  final _token = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _provider = widget.current['provider'] as String? ?? 'manual_pix';
+    _pix =
+        TextEditingController(text: widget.current['pix_key'] as String? ?? '');
+    _merchant = TextEditingController(
+        text: widget.current['merchant_name'] as String? ?? '');
+  }
+
+  @override
+  void dispose() {
+    _pix.dispose();
+    _merchant.dispose();
+    _token.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final error = await Api.savePaymentProvider(
+      provider: _provider,
+      pixKey: _pix.text.trim().isEmpty ? null : _pix.text.trim(),
+      merchantName:
+          _merchant.text.trim().isEmpty ? null : _merchant.text.trim(),
+      apiToken: _token.text.trim().isEmpty ? null : _token.text.trim(),
+    );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context, true);
+    } else {
+      setState(() {
+        _saving = false;
+        _error = error;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokenConfigured = widget.current['token_configured'] == true;
+    return AlertDialog(
+      title: const Text('Recebimentos'),
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            initialValue: _provider,
+            decoration: const InputDecoration(labelText: 'Forma de integração'),
+            items: const [
+              DropdownMenuItem(
+                  value: 'manual_pix', child: Text('PIX manual (sem API)')),
+              DropdownMenuItem(
+                  value: 'mercado_pago',
+                  child: Text('Mercado Pago Checkout Pro')),
+            ],
+            onChanged: (value) => setState(() => _provider = value!),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+              controller: _merchant,
+              decoration:
+                  const InputDecoration(labelText: 'Nome de quem recebe')),
+          const SizedBox(height: 12),
+          if (_provider == 'manual_pix')
+            TextField(
+                controller: _pix,
+                decoration: const InputDecoration(labelText: 'Chave PIX')),
+          if (_provider == 'mercado_pago') ...[
+            TextField(
+              controller: _token,
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                labelText: tokenConfigured
+                    ? 'Novo Access Token (opcional)'
+                    : 'Access Token',
+                helperText: tokenConfigured
+                    ? 'Credencial atual protegida. Deixe vazio para manter.'
+                    : 'Copie em Suas integrações no Mercado Pago.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+                'A credencial é cifrada no servidor e nunca volta para o celular.',
+                style: TextStyle(fontSize: 12)),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!, style: const TextStyle(color: AppColors.error)),
+          ],
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context, false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Salvando...' : 'Salvar')),
+      ],
     );
   }
 }

@@ -147,6 +147,14 @@ test('fluxo completo de cadastro, mensalidade, ida e volta', async () => {
   assert.equal(generated.created, 1);
   const payments = await json('GET', `/api/payments?month=${month}`, undefined, adminToken);
   paymentId = payments[0].id;
+  const provider = await json('PUT', '/api/payment-provider', {
+    provider: 'manual_pix', pix_key: 'teste@pix.local', merchant_name: 'Transporte Teste',
+  }, adminToken);
+  assert.equal(provider.provider, 'manual_pix');
+  const checkout = await json('POST', `/api/payments/${paymentId}/checkout`, undefined, adminToken);
+  assert.equal(checkout.pix_key, 'teste@pix.local');
+  const parentPending = await json('GET', `/api/payments/mine?month=${month}`, undefined, parentToken);
+  assert.equal(parentPending[0].pix_key, 'teste@pix.local');
   const paid = await json('PUT', `/api/payments/${paymentId}`, {
     status: 'paid', payment_method: 'pix', notes: 'Pagamento simulado no teste E2E',
   }, adminToken);

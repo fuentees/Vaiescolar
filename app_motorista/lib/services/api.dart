@@ -968,6 +968,54 @@ class Api {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  static Future<Map<String, dynamic>> paymentProvider() async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/payment-provider'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) {
+      return {'provider': 'manual_pix', 'active': false};
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<String?> savePaymentProvider({
+    required String provider,
+    String? pixKey,
+    String? merchantName,
+    String? apiToken,
+  }) async {
+    final res = await http.put(
+      Uri.parse('${Config.apiBase}/api/payment-provider'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({
+        'provider': provider,
+        'pix_key': pixKey,
+        'merchant_name': merchantName,
+        'api_token': apiToken
+      }),
+    );
+    if (res.statusCode == 200) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Não foi possível salvar.';
+    }
+  }
+
+  static Future<Map<String, dynamic>?> createPaymentCheckout(
+      String paymentId) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/payments/$paymentId/checkout'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) return null;
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   // ---------------------------------------------------------------------
   // Dashboard (home)
   // ---------------------------------------------------------------------

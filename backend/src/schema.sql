@@ -355,6 +355,23 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 
 -- Forma de pagamento (P1 fase 6) -- opcional, so preenchido quando marca como pago.
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS checkout_url TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider_status TEXT;
+
+-- Credenciais de pagamento por empresa. O token e sempre cifrado pela API;
+-- nenhum endpoint devolve o valor original ao aplicativo.
+CREATE TABLE IF NOT EXISTS payment_provider_configs (
+  tenant_id       UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  provider        TEXT NOT NULL CHECK (provider IN ('manual_pix','mercado_pago')),
+  api_token_enc   TEXT,
+  pix_key         TEXT,
+  merchant_name   TEXT,
+  active          BOOLEAN NOT NULL DEFAULT true,
+  updated_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- Auditoria administrativa (P1 fase 7): quem alterou o que, em cima de dado
 -- sensivel (reset de senha, status de pagamento, criar/editar/excluir

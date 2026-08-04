@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.15', buildNumber: 4021, releaseBuild: 21,
+      version: '1.0.16', buildNumber: 4022, releaseBuild: 22,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona aluno não localizado, conferência da van vazia e identificação completa do veículo.',
+      notes: 'Prepara pagamentos com PIX manual e Mercado Pago, credenciais cifradas e confirmação automática.',
     },
     responsavel: {
-      version: '1.0.15', buildNumber: 4021, releaseBuild: 21,
+      version: '1.0.16', buildNumber: 4022, releaseBuild: 22,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona aluno não localizado, conferência da van vazia e identificação completa do veículo.',
+      notes: 'Prepara pagamentos com PIX manual e Mercado Pago, credenciais cifradas e confirmação automática.',
     },
   };
   const version = versions[req.params.app];
@@ -1115,6 +1115,100 @@ app.get('/api/routes/:id/students', authMiddleware, requireRole('admin'), async 
 
 // Normaliza "YYYY-MM" (ou vazio) pro dia 1 daquele mes; usa o mes atual se
 // nao vier nada.
+app.get('/api/payment-provider', authMiddleware, requireRole('admin'), async (req, res) => {
+  const r = await db.query(
+    `SELECT provider, pix_key, merchant_name, active, updated_at,
+            (api_token_enc IS NOT NULL) AS token_configured
+       FROM payment_provider_configs WHERE tenant_id=$1`, [req.auth.tenantId]);
+  res.json(r.rows[0] || { provider: 'manual_pix', active: false, token_configured: false });
+});
+
+app.put('/api/payment-provider', authMiddleware, requireRole('admin'), async (req, res) => {
+  const provider = String(req.body?.provider || '');
+  const pixKey = String(req.body?.pix_key || '').trim().slice(0, 200) || null;
+  const merchantName = String(req.body?.merchant_name || '').trim().slice(0, 200) || null;
+  const apiToken = String(req.body?.api_token || '').trim();
+  if (!['manual_pix', 'mercado_pago'].includes(provider)) return res.status(400).json({ error: 'provedor nao suportado' });
+  if (provider === 'manual_pix' && !pixKey) return res.status(400).json({ error: 'informe a chave PIX' });
+  const current = await db.query('SELECT api_token_enc FROM payment_provider_configs WHERE tenant_id=$1', [req.auth.tenantId]);
+  const encryptedToken = apiToken ? encryptPaymentSecret(apiToken) : current.rows[0]?.api_token_enc || null;
+  if (provider === 'mercado_pago' && !encryptedToken) return res.status(400).json({ error: 'informe o Access Token do Mercado Pago' });
+  await db.query(
+    `INSERT INTO payment_provider_configs(tenant_id, provider, api_token_enc, pix_key, merchant_name, active, updated_by)
+     VALUES($1,$2,$3,$4,$5,true,$6)
+     ON CONFLICT (tenant_id) DO UPDATE SET provider=$2, api_token_enc=$3,
+       pix_key=$4, merchant_name=$5, active=true, updated_by=$6, updated_at=now()`,
+    [req.auth.tenantId, provider, encryptedToken, pixKey, merchantName, req.auth.userId]);
+  await logAudit(req, 'configurar', 'payment_provider', req.auth.tenantId, { provider, tokenChanged: Boolean(apiToken) });
+  res.json({ ok: true, provider, token_configured: Boolean(encryptedToken) });
+});
+
+app.delete('/api/payment-provider', authMiddleware, requireRole('admin'), async (req, res) => {
+  await db.query('UPDATE payment_provider_configs SET active=false, updated_at=now() WHERE tenant_id=$1', [req.auth.tenantId]);
+  await logAudit(req, 'desativar', 'payment_provider', req.auth.tenantId, null);
+  res.json({ ok: true });
+});
+
+app.post('/api/payments/:id/checkout', authMiddleware, requireRole('admin'), async (req, res) => {
+  const payment = await db.query(
+    `SELECT p.*, s.name AS student_name,
+            (SELECT u.email FROM student_guardians sg JOIN users u ON u.id=sg.guardian_user_id
+              WHERE sg.student_id=s.id LIMIT 1) AS payer_email
+       FROM payments p JOIN students s ON s.id=p.student_id
+      WHERE p.id=$1 AND p.tenant_id=$2`, [req.params.id, req.auth.tenantId]);
+  if (payment.rows.length === 0) return res.status(404).json({ error: 'cobranca nao encontrada' });
+  if (payment.rows[0].status === 'paid') return res.status(409).json({ error: 'cobranca ja esta paga' });
+  const config = await db.query('SELECT * FROM payment_provider_configs WHERE tenant_id=$1 AND active=true', [req.auth.tenantId]);
+  if (config.rows.length === 0) return res.status(409).json({ error: 'configure um provedor de pagamento' });
+  const cfg = config.rows[0];
+  if (cfg.provider === 'manual_pix') {
+    await db.query(`UPDATE payments SET provider='manual_pix', provider_status='awaiting_manual_confirmation' WHERE id=$1`, [req.params.id]);
+    return res.json({ provider: 'manual_pix', pix_key: cfg.pix_key, merchant_name: cfg.merchant_name });
+  }
+  const accessToken = decryptPaymentSecret(cfg.api_token_enc);
+  const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const mpResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
+    method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items: [{ id: payment.rows[0].id, title: `Transporte escolar - ${payment.rows[0].student_name}`, quantity: 1, currency_id: 'BRL', unit_price: Number(payment.rows[0].amount) }],
+      payer: payment.rows[0].payer_email ? { email: payment.rows[0].payer_email } : undefined,
+      external_reference: payment.rows[0].id,
+      notification_url: `${baseUrl}/api/webhooks/mercado-pago/${req.auth.tenantId}`,
+    }),
+  });
+  const mp = await mpResponse.json();
+  if (!mpResponse.ok || !mp.id || !mp.init_point) {
+    console.error('[payment] Mercado Pago rejeitou preferencia', mpResponse.status, mp.message || mp.error);
+    return res.status(502).json({ error: 'Mercado Pago rejeitou a cobranca; confira a credencial' });
+  }
+  await db.query(`UPDATE payments SET provider='mercado_pago', external_id=$1, checkout_url=$2, provider_status='pending' WHERE id=$3`, [mp.id, mp.init_point, req.params.id]);
+  res.json({ provider: 'mercado_pago', checkout_url: mp.init_point, external_id: mp.id });
+});
+
+app.post('/api/webhooks/mercado-pago/:tenantId', async (req, res) => {
+  res.json({ received: true });
+  const paymentId = req.body?.data?.id || req.query['data.id'];
+  if (!paymentId || !/^[0-9]+$/.test(String(paymentId))) return;
+  try {
+    const config = await db.query(`SELECT api_token_enc FROM payment_provider_configs WHERE tenant_id=$1 AND provider='mercado_pago' AND active=true`, [req.params.tenantId]);
+    if (!config.rows[0]?.api_token_enc) return;
+    const token = decryptPaymentSecret(config.rows[0].api_token_enc);
+    const verified = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!verified.ok) return;
+    const mp = await verified.json();
+    if (!mp.external_reference) return;
+    await db.query(
+      `UPDATE payments SET provider_status=$1,
+         status=CASE WHEN $1='approved' THEN 'paid' ELSE status END,
+         paid_at=CASE WHEN $1='approved' THEN COALESCE(paid_at, now()) ELSE paid_at END,
+         payment_method=CASE WHEN $1='approved' THEN 'Mercado Pago' ELSE payment_method END
+       WHERE id=$2 AND tenant_id=$3 AND provider='mercado_pago'`,
+      [mp.status, mp.external_reference, req.params.tenantId]);
+  } catch (error) {
+    console.error('[payment] falha ao processar webhook Mercado Pago', error.message);
+  }
+});
+
 function parseReferenceMonth(month) {
   if (month && /^\d{4}-\d{2}$/.test(month)) return `${month}-01`;
   const now = new Date();
@@ -1207,9 +1301,11 @@ app.get('/api/payments/summary', authMiddleware, requireRole('admin'), async (re
 app.get('/api/payments/mine', authMiddleware, requireRole('parent'), async (req, res) => {
   const refMonth = parseReferenceMonth(req.query.month);
   const r = await db.query(
-    `SELECT p.student_id, p.status, p.amount
+    `SELECT p.student_id, p.status, p.amount, p.provider, p.checkout_url,
+            p.provider_status, cfg.pix_key, cfg.merchant_name
        FROM payments p
        JOIN student_guardians sg ON sg.student_id = p.student_id
+       LEFT JOIN payment_provider_configs cfg ON cfg.tenant_id=p.tenant_id AND cfg.active=true
       WHERE sg.guardian_user_id=$1 AND sg.tenant_id=$2 AND p.reference_month=$3`,
     [req.auth.userId, req.auth.tenantId, refMonth]
   );
@@ -1706,6 +1802,26 @@ async function tripGuardianIds(tripId, tenantId) {
     [tripId, tenantId]
   );
   return guardians.rows.map((row) => row.guardian_user_id);
+}
+
+function paymentCipherKey() {
+  const secret = process.env.PAYMENT_CONFIG_ENCRYPTION_KEY || process.env.JWT_SECRET;
+  if (!secret || secret.length < 16) throw new Error('chave de criptografia de pagamentos ausente');
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function encryptPaymentSecret(value) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', paymentCipherKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+  return [iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), encrypted.toString('base64url')].join('.');
+}
+
+function decryptPaymentSecret(value) {
+  const [ivRaw, tagRaw, encryptedRaw] = String(value).split('.');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', paymentCipherKey(), Buffer.from(ivRaw, 'base64url'));
+  decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
+  return Buffer.concat([decipher.update(Buffer.from(encryptedRaw, 'base64url')), decipher.final()]).toString('utf8');
 }
 
 app.post('/api/trips/:id/cancel', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {

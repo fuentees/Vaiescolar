@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../services/api.dart';
 import '../services/api_result.dart';
@@ -114,7 +116,7 @@ class ChildrenListScreen extends StatefulWidget {
 class _ChildrenListScreenState extends State<ChildrenListScreen> {
   List<dynamic> _children = [];
   final Map<String, _ActiveTrip> _activeByStudent = {};
-  final Map<String, String> _paymentStatusByStudent = {};
+  final Map<String, Map<String, dynamic>> _paymentStatusByStudent = {};
   final Map<String, Map<String, dynamic>> _nextAbsenceByStudent = {};
   String _firstName = '';
   int _newAlerts = 0;
@@ -212,8 +214,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
     _paymentStatusByStudent.clear();
     for (final dynamic item in results[1] as List<dynamic>) {
       final p = item as Map<String, dynamic>;
-      _paymentStatusByStudent[p['student_id'] as String] =
-          p['status'] as String;
+      _paymentStatusByStudent[p['student_id'] as String] = p;
     }
     _nextAbsenceByStudent.clear();
     for (final dynamic item in results[2] as List<dynamic>) {
@@ -570,18 +571,43 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
               Row(
                 children: [
                   Icon(
-                    payment == 'paid'
+                    payment['status'] == 'paid'
                         ? Icons.check_circle_outline
                         : Icons.receipt_long_outlined,
                     size: 18,
-                    color: payment == 'paid'
+                    color: payment['status'] == 'paid'
                         ? AppColors.success
                         : AppColors.accent,
                   ),
                   const SizedBox(width: 8),
-                  Text(payment == 'paid'
-                      ? 'Mensalidade em dia'
-                      : 'Mensalidade pendente'),
+                  Expanded(
+                    child: Text(payment['status'] == 'paid'
+                        ? 'Mensalidade em dia'
+                        : 'Mensalidade pendente'),
+                  ),
+                  if (payment['status'] != 'paid' &&
+                      payment['checkout_url'] != null)
+                    TextButton(
+                      onPressed: () => launchUrl(
+                        Uri.parse(payment['checkout_url'] as String),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                      child: const Text('Pagar'),
+                    )
+                  else if (payment['status'] != 'paid' &&
+                      payment['pix_key'] != null)
+                    TextButton(
+                      onPressed: () async {
+                        await Clipboard.setData(
+                            ClipboardData(text: payment['pix_key'] as String));
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Chave PIX copiada')),
+                          );
+                        }
+                      },
+                      child: const Text('Copiar PIX'),
+                    ),
                 ],
               ),
             ],
