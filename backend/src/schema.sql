@@ -184,6 +184,9 @@ CREATE TABLE IF NOT EXISTS trip_incidents (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   resolved_at TIMESTAMPTZ
 );
+ALTER TABLE trip_incidents DROP CONSTRAINT IF EXISTS trip_incidents_type_check;
+ALTER TABLE trip_incidents ADD CONSTRAINT trip_incidents_type_check
+  CHECK (type IN ('delay','breakdown','accident','student_missing','school_closed','sos','other'));
 CREATE INDEX IF NOT EXISTS idx_trip_incidents_trip ON trip_incidents(trip_id, created_at DESC);
 
 -- Historico completo de posicoes (breadcrumb / auditoria).

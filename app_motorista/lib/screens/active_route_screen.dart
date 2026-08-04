@@ -224,6 +224,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
         _routes.firstWhere((r) => r['id'] == _routeId, orElse: () => null);
     final vehicle =
         _vehicles.firstWhere((v) => v['id'] == _vehicleId, orElse: () => null);
+    final vehicleCapacity = vehicle?['capacity'] as int?;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -244,7 +245,10 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                   vehicle?['plate'] as String? ?? 'Veículo padrão da rota')),
           ListTile(
               leading: const Icon(Icons.groups),
-              title: Text('${linkedStudents.length} alunos na rota')),
+              title: Text('${linkedStudents.length} alunos na rota'),
+              subtitle: vehicleCapacity != null && vehicleCapacity > 0
+                  ? Text('Capacidade do veículo: $vehicleCapacity lugares')
+                  : const Text('Capacidade do veículo não informada')),
         ]),
         actions: [
           TextButton(
@@ -288,8 +292,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       await _checkActiveTrip();
       if (!mounted) return;
       if (_activeTripId == null) {
-        setState(
-            () => _error = 'Nao foi possivel iniciar a rota. Tente novamente.');
+        setState(() => _error = Api.lastError ??
+            'Nao foi possivel iniciar a rota. Tente novamente.');
       }
     }
     if (mounted) setState(() => _busy = false);
@@ -424,16 +428,26 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                         '${students.length} aluno${students.length == 1 ? '' : 's'}',
                       if (address != null && address.isNotEmpty) address,
                     ].join(' • ')),
-                    trailing: address == null || address.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Navegar até esta parada',
-                            icon: const Icon(Icons.navigation_outlined),
-                            onPressed: () {
-                              Navigator.pop(sheetContext);
-                              _navigateTo(address);
-                            },
-                          ),
+                    trailing: Wrap(children: [
+                      if (address != null && address.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Navegar até esta parada',
+                          icon: const Icon(Icons.navigation_outlined),
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _navigateTo(address);
+                          },
+                        ),
+                      if (school)
+                        IconButton(
+                          tooltip: 'Confirmar alunos desta escola',
+                          icon: const Icon(Icons.how_to_reg_outlined),
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _confirmSchoolDrop(stop);
+                          },
+                        ),
+                    ]),
                   );
                 },
               ),
@@ -442,6 +456,60 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmSchoolDrop(Map<String, dynamic> stop) async {
+    final schoolId = stop['school_id'] as String?;
+    final schoolName = stop['name'] as String? ?? 'esta escola';
+    final boarded = _students
+        .where((student) =>
+            (schoolId != null
+                ? student['school_id'] == schoolId
+                : student['school_name'] == schoolName) &&
+            student['last_status'] == 'boarded' &&
+            student['emergency_return_active'] != true)
+        .toList();
+    if (boarded.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nenhum aluno embarcado pendente nesta escola.')));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Confirmar chegada em $schoolName?'),
+        content: Text(
+          '${boarded.length} aluno${boarded.length == 1 ? '' : 's'} será${boarded.length == 1 ? '' : 'ão'} marcado${boarded.length == 1 ? '' : 's'} como entregue${boarded.length == 1 ? '' : 's'} nesta escola.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Voltar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Confirmar todos')),
+        ],
+      ),
+    );
+    if (confirmed != true || _activeTripId == null) return;
+    setState(() => _busy = true);
+    var success = 0;
+    for (final student in boarded) {
+      final ok = await Api.registerEvent(
+        tripId: _activeTripId!,
+        studentId: student['id'] as String,
+        type: 'dropped',
+      );
+      if (ok) success++;
+    }
+    await _loadStudents();
+    await TrackingService.refreshProximityStops();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+          '$success de ${boarded.length} alunos confirmados em $schoolName'),
+    ));
   }
 
   Future<void> _mark(
@@ -599,6 +667,45 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     ));
   }
 
+  Future<void> _sendSos() async {
+    final tripId = _activeTripId;
+    if (tripId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.sos, color: AppColors.error, size: 42),
+        title: const Text('Enviar alerta SOS?'),
+        content: const Text(
+          'Todos os responsáveis desta rota receberão agora um alerta urgente com som. Use somente em uma emergência real.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Voltar')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ENVIAR SOS'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final ok = await Api.reportIncident(
+      tripId,
+      'sos',
+      'O motorista acionou o SOS. Aguarde novas informações e mantenha o telefone disponível.',
+    );
+    if (!mounted) return;
+    HapticFeedback.heavyImpact();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'SOS enviado aos responsáveis'
+          : 'Falha ao enviar SOS. Ligue para o serviço de emergência.'),
+      backgroundColor: AppColors.error,
+    ));
+  }
+
   Future<void> _changeVehicle() async {
     final tripId = _activeTripId;
     if (tripId == null || _vehicles.isEmpty) return;
@@ -734,11 +841,17 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                 tooltip: 'Ocorrências e emergência',
                 icon: const Icon(Icons.warning_amber_rounded),
                 onSelected: (value) {
+                  if (value == 'sos') _sendSos();
                   if (value == 'incident') _reportIncident();
                   if (value == 'vehicle') _changeVehicle();
                   if (value == 'cancel') _cancelTrip();
                 },
                 itemBuilder: (_) => const [
+                  PopupMenuItem(
+                      value: 'sos',
+                      child: ListTile(
+                          leading: Icon(Icons.sos, color: AppColors.error),
+                          title: Text('Enviar SOS'))),
                   PopupMenuItem(
                       value: 'incident',
                       child: ListTile(
@@ -858,6 +971,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     final startedAt = _activeTripStartedAt;
     final lastSentAt = TrackingService.lastSentAt.value;
     final gpsOnline = TrackingService.gpsOnline.value;
+    final gpsStale =
+        lastSentAt != null && _now.difference(lastSentAt).inMinutes >= 2;
     return Column(
       children: [
         Container(
@@ -873,6 +988,21 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                 Text(_formatElapsed(startedAt),
                     style: Theme.of(context).textTheme.titleSmall),
             ]),
+            if (gpsStale) ...[
+              const SizedBox(height: 8),
+              const Row(children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 18, color: AppColors.error),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'GPS sem atualização há mais de 2 minutos. Verifique sinal, internet e economia de bateria.',
+                    style: TextStyle(
+                        color: AppColors.error, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ]),
+            ],
             const SizedBox(height: 4),
             Row(children: [
               const Icon(Icons.auto_awesome,

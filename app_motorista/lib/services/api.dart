@@ -7,6 +7,7 @@ class Api {
   static String? _token;
   static String? _userId;
   static String? _role;
+  static String? lastError;
 
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -131,6 +132,7 @@ class Api {
 
   static Future<String?> startTrip(String routeId, String direction,
       {String? vehicleId}) async {
+    lastError = null;
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/trips/start'),
       headers: {
@@ -144,6 +146,11 @@ class Api {
       }),
     );
     if (res.statusCode == 200) return jsonDecode(res.body)['tripId'];
+    try {
+      lastError = jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      lastError = 'Não foi possível iniciar a rota.';
+    }
     return null;
   }
 

@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.13', buildNumber: 4019, releaseBuild: 19,
+      version: '1.0.14', buildNumber: 4020, releaseBuild: 20,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Prepara rotas com várias escolas, agrupando os alunos e exibindo todas as paradas corretas.',
+      notes: 'Adiciona SOS, bloqueio de lotação, alerta de GPS parado e confirmação coletiva por escola.',
     },
     responsavel: {
-      version: '1.0.13', buildNumber: 4019, releaseBuild: 19,
+      version: '1.0.14', buildNumber: 4020, releaseBuild: 20,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Prepara rotas com várias escolas, agrupando os alunos e exibindo todas as paradas corretas.',
+      notes: 'Adiciona SOS, bloqueio de lotação, alerta de GPS parado e confirmação coletiva por escola.',
     },
   };
   const version = versions[req.params.app];
@@ -1581,6 +1581,32 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
     tripVehicleId = vehicle_id;
   }
 
+  // Lotacao e uma regra de seguranca, nao apenas um aviso visual. Considera
+  // somente alunos que realmente farao este trajeto hoje.
+  if (tripVehicleId) {
+    const occupancy = await db.query(
+      `SELECT v.capacity,
+              count(rs.student_id) FILTER (WHERE ab.id IS NULL)::int AS passenger_count
+         FROM vehicles v
+         JOIN routes r ON r.id=$2 AND r.tenant_id=$3
+         LEFT JOIN route_students rs ON rs.route_id=r.id
+         LEFT JOIN absences ab ON ab.student_id=rs.student_id
+          AND ab.date=(now() AT TIME ZONE 'America/Sao_Paulo')::date
+          AND ab.direction IN ('all', $4)
+        WHERE v.id=$1 AND v.tenant_id=$3
+        GROUP BY v.capacity`,
+      [tripVehicleId, route_id, req.auth.tenantId, direction]
+    );
+    const capacity = Number(occupancy.rows[0]?.capacity || 0);
+    const passengerCount = Number(occupancy.rows[0]?.passenger_count || 0);
+    if (capacity > 0 && passengerCount > capacity) {
+      return res.status(409).json({
+        error: `lotacao excedida: ${passengerCount} alunos para ${capacity} lugares`,
+        passengerCount, capacity,
+      });
+    }
+  }
+
   let r;
   try {
     r = await db.query(
@@ -1698,7 +1724,7 @@ app.post('/api/trips/:id/cancel', authMiddleware, requireRole('driver', 'admin')
 });
 
 app.post('/api/trips/:id/incidents', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
-  const allowed = ['delay', 'breakdown', 'accident', 'student_missing', 'school_closed', 'other'];
+  const allowed = ['delay', 'breakdown', 'accident', 'student_missing', 'school_closed', 'sos', 'other'];
   const type = String(req.body?.type || 'other');
   const description = String(req.body?.description || '').trim().slice(0, 500);
   if (!allowed.includes(type)) return res.status(400).json({ error: 'tipo de ocorrencia invalido' });
@@ -1714,7 +1740,7 @@ app.post('/api/trips/:id/incidents', authMiddleware, requireRole('driver', 'admi
      VALUES($1,$2,$3,$4,$5) RETURNING id, created_at`,
     [req.auth.tenantId, req.params.id, type, description, req.auth.userId]
   );
-  const titles = { delay: 'Atraso na rota', breakdown: 'Van com problema', accident: 'Ocorrencia urgente', student_missing: 'Aluno nao localizado', school_closed: 'Escola fechada', other: 'Aviso sobre a rota' };
+  const titles = { delay: 'Atraso na rota', breakdown: 'Van com problema', accident: 'Ocorrencia urgente', student_missing: 'Aluno nao localizado', school_closed: 'Escola fechada', sos: 'SOS - emergencia na rota', other: 'Aviso sobre a rota' };
   const ids = await tripGuardianIds(req.params.id, req.auth.tenantId);
   const payload = { type: 'trip_incident', incidentType: type, description, tripId: req.params.id };
   hub.broadcast(req.params.id, payload);
