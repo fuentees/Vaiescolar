@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import '../services/api.dart';
 import '../services/api_result.dart';
+import '../services/app_refresh_signal.dart';
 import '../theme.dart';
 import 'link_child_screen.dart';
 import 'maintenance_screen.dart';
@@ -116,14 +117,20 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
   void initState() {
     super.initState();
     _load();
+    AppRefreshSignal.trips.addListener(_onTripsChanged);
     _liveRefreshTimer =
-        Timer.periodic(const Duration(seconds: 30), (_) => _refreshTrips());
+        Timer.periodic(const Duration(seconds: 5), (_) => _refreshTrips());
   }
 
   @override
   void dispose() {
+    AppRefreshSignal.trips.removeListener(_onTripsChanged);
     _liveRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _onTripsChanged() {
+    _refreshTrips();
   }
 
   void _setActiveTrips(List<dynamic> rows) {

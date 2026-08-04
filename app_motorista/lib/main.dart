@@ -5,6 +5,7 @@ import 'package:app_pais/services/api.dart' as parent_api;
 import 'package:app_pais/services/api_http.dart' as parent_http;
 import 'package:app_pais/services/push_service.dart' as parent_push;
 import 'package:app_pais/services/host_actions.dart' as parent_host;
+import 'package:app_pais/services/app_refresh_signal.dart' as parent_refresh;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -127,6 +128,11 @@ void _initPushInBackground(AppProfile? profile) async {
 
 void _showForegroundNotification(
     String title, String body, Map<String, dynamic> data) {
+  if (data['type'] == 'trip_started' ||
+      data['type'] == 'trip_event' ||
+      data['type'] == 'approaching') {
+    parent_refresh.AppRefreshSignal.notifyTripsChanged();
+  }
   final context = navigatorKey.currentContext;
   if (context == null) return;
   ScaffoldMessenger.of(context)

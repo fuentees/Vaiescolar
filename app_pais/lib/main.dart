@@ -7,6 +7,7 @@ import 'services/api.dart';
 import 'services/api_http.dart';
 import 'services/push_service.dart';
 import 'services/theme_controller.dart';
+import 'services/app_refresh_signal.dart';
 import 'screens/login_screen.dart';
 import 'screens/app_shell.dart';
 import 'screens/parent_map.dart';
@@ -64,6 +65,11 @@ void _initPushInBackground() async {
       }
     };
     PushService.onForeground = (title, body, data) {
+      if (data['type'] == 'trip_started' ||
+          data['type'] == 'trip_event' ||
+          data['type'] == 'approaching') {
+        AppRefreshSignal.notifyTripsChanged();
+      }
       final context = navigatorKey.currentContext;
       if (context == null) return;
       ScaffoldMessenger.of(context)
