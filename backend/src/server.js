@@ -75,12 +75,12 @@ app.get('/app-version/:app', (req, res) => {
     motorista: {
       version: '1.0.4', buildNumber: 4010, releaseBuild: 10,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Correção da verificação automática de atualizações.',
+      notes: 'GPS mais seguro, troca de perfil e proteção ao finalizar a rota.',
     },
     responsavel: {
       version: '1.0.4', buildNumber: 4010, releaseBuild: 10,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Correção da verificação automática de atualizações.',
+      notes: 'GPS mais seguro, troca de perfil e proteção ao finalizar a rota.',
     },
   };
   const version = versions[req.params.app];
