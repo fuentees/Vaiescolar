@@ -1,24 +1,26 @@
 // firebase-admin v14+ usa API modular (nao ha mais admin.credential/admin.messaging
 // no objeto default de require('firebase-admin') -- precisa importar dos submodulos).
-const { initializeApp, applicationDefault } = require('firebase-admin/app');
+const { initializeApp, applicationDefault, cert } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 const db = require('./db');
 
 let firebaseApp = null;
 let warnedMissingCredentials = false;
 
-// So inicializa o Firebase Admin se GOOGLE_APPLICATION_CREDENTIALS estiver
-// configurado. Sem isso, push vira no-op (util em dev sem projeto Firebase).
+// No Render nao existe um arquivo persistente de service account. Por isso
+// aceita tambem o JSON inteiro em FIREBASE_SERVICE_ACCOUNT_JSON.
 function getFirebaseApp() {
   if (firebaseApp) return firebaseApp;
-  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!json && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     if (!warnedMissingCredentials) {
       console.warn('[push] GOOGLE_APPLICATION_CREDENTIALS nao configurado - notificacoes desativadas');
       warnedMissingCredentials = true;
     }
     return null;
   }
-  firebaseApp = initializeApp({ credential: applicationDefault() });
+  const credential = json ? cert(JSON.parse(json)) : applicationDefault();
+  firebaseApp = initializeApp({ credential });
   return firebaseApp;
 }
 
@@ -45,6 +47,10 @@ async function sendToUsers(userIds, title, body, data = {}) {
     tokens: r.rows.map((u) => u.fcm_token),
     notification: { title, body },
     data: stringData,
+    android: {
+      priority: 'high',
+      notification: { sound: 'default', channelId: 'vaiescolar_alerts' },
+    },
   });
 
   const invalidUserIds = [];

@@ -484,9 +484,24 @@ app.get('/api/chat/:parentUserId', authMiddleware, async (req, res) => {
   const parentUserId = await resolveChatParentId(req, res);
   if (!parentUserId) return;
   const r = await db.query(
-    `SELECT id, sender_user_id, body, created_at
-       FROM chat_messages
-      WHERE tenant_id = $1 AND parent_user_id = $2
+    `SELECT cm.id, cm.sender_user_id, cm.body, cm.created_at,
+            CASE
+              WHEN cm.sender_user_id = cm.parent_user_id THEN EXISTS(
+                SELECT 1 FROM chat_reads cr
+                JOIN users reader ON reader.id=cr.user_id
+                WHERE cr.parent_user_id=cm.parent_user_id
+                  AND reader.role IN ('admin','driver')
+                  AND cr.last_read_at >= cm.created_at
+              )
+              ELSE EXISTS(
+                SELECT 1 FROM chat_reads cr
+                WHERE cr.parent_user_id=cm.parent_user_id
+                  AND cr.user_id=cm.parent_user_id
+                  AND cr.last_read_at >= cm.created_at
+              )
+            END AS is_read
+       FROM chat_messages cm
+      WHERE cm.tenant_id = $1 AND cm.parent_user_id = $2
       ORDER BY created_at ASC`,
     [req.auth.tenantId, parentUserId]
   );

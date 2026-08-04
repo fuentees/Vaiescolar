@@ -1,4 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'api.dart';
 
 /// Precisa ser top-level para funcionar como background message handler do
@@ -15,6 +16,14 @@ typedef PushForegroundHandler = void Function(
 /// encaminha toques em notificacoes (ex.: "nova mensagem de um responsavel")
 /// para quem estiver ouvindo via [onTap] -- normalmente abre o chat.
 class PushService {
+  static final _local = FlutterLocalNotificationsPlugin();
+  static const _channel = AndroidNotificationChannel(
+    'vaiescolar_alerts',
+    'Alertas VaiEscolar',
+    description: 'Embarques, desembarques, aproximações e mensagens',
+    importance: Importance.max,
+    playSound: true,
+  );
   static PushTapHandler? onTap;
   static PushForegroundHandler? onForeground;
   static bool _initialized = false;
@@ -30,6 +39,15 @@ class PushService {
 
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
+    await _local.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ),
+    );
+    await _local
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_channel);
 
     final token = await messaging.getToken();
     if (token != null) await Api.registerFcmToken(token);
@@ -39,6 +57,25 @@ class PushService {
         .listen((message) => onTap?.call(message.data));
 
     FirebaseMessaging.onMessage.listen((message) {
+      final notification = message.notification;
+      if (notification != null) {
+        _local.show(
+          id: message.hashCode,
+          title: notification.title,
+          body: notification.body,
+          notificationDetails: const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'vaiescolar_alerts',
+              'Alertas VaiEscolar',
+              channelDescription:
+                  'Embarques, desembarques, aproximações e mensagens',
+              importance: Importance.max,
+              priority: Priority.high,
+              playSound: true,
+            ),
+          ),
+        );
+      }
       onForeground?.call(
         message.notification?.title ?? 'Nova notificacao',
         message.notification?.body ?? '',

@@ -19,6 +19,7 @@ dependencies:
   mobile_scanner: ^5.2.3
   geocoding: ^5.0.0
   package_info_plus: ^8.1.1
+  flutter_local_notifications: ^22.2.0
 
 dev_dependencies:
   flutter_test:

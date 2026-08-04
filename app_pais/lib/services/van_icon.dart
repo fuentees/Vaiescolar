@@ -9,8 +9,8 @@ import '../theme.dart';
 /// uma imagem binaria no repositorio.
 Future<BitmapDescriptor> buildVanMarkerIcon(
     {double devicePixelRatio = 3.0}) async {
-  const double w = 64;
-  const double h = 44;
+  const double w = 42;
+  const double h = 30;
 
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder,
@@ -26,30 +26,30 @@ Future<BitmapDescriptor> buildVanMarkerIcon(
   final wheelPaint = Paint()..color = const Color(0xFF1C2B2B);
 
   final bodyRect = RRect.fromRectAndRadius(
-    const Rect.fromLTWH(2, 6, w - 4, h - 18),
-    const Radius.circular(8),
+    const Rect.fromLTWH(2, 4, w - 4, h - 12),
+    const Radius.circular(6),
   );
   canvas.drawRRect(bodyRect, bodyPaint);
   canvas.drawRRect(bodyRect, outlinePaint);
 
   canvas.drawRRect(
     RRect.fromRectAndRadius(
-        const Rect.fromLTWH(8, 10, 16, 10), const Radius.circular(3)),
+        const Rect.fromLTWH(6, 7, 10, 7), const Radius.circular(2)),
     windowPaint,
   );
   canvas.drawRRect(
     RRect.fromRectAndRadius(
-        const Rect.fromLTWH(28, 10, 16, 10), const Radius.circular(3)),
+        const Rect.fromLTWH(19, 7, 10, 7), const Radius.circular(2)),
     windowPaint,
   );
   canvas.drawRRect(
     RRect.fromRectAndRadius(
-        const Rect.fromLTWH(w - 20, 10, 12, 10), const Radius.circular(3)),
+        const Rect.fromLTWH(w - 11, 7, 7, 7), const Radius.circular(2)),
     windowPaint,
   );
 
-  canvas.drawCircle(const Offset(14, h - 8), 6, wheelPaint);
-  canvas.drawCircle(const Offset(w - 14, h - 8), 6, wheelPaint);
+  canvas.drawCircle(const Offset(10, h - 5), 4, wheelPaint);
+  canvas.drawCircle(const Offset(w - 10, h - 5), 4, wheelPaint);
 
   final picture = recorder.endRecording();
   final image = await picture.toImage(

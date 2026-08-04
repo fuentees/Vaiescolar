@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/chat_socket.dart';
@@ -10,7 +12,9 @@ class _Msg {
   final String body;
   final DateTime at;
   _MsgStatus status;
-  _Msg(this.senderUserId, this.body, this.at, {this.status = _MsgStatus.sent});
+  final bool isRead;
+  _Msg(this.senderUserId, this.body, this.at,
+      {this.status = _MsgStatus.sent, this.isRead = false});
 }
 
 /// Conversa com um responsavel especifico. Carrega o historico via HTTP e
@@ -32,6 +36,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   ChatSocket _socket = ChatSocket();
   bool _loading = true;
   bool _sending = false;
+  Timer? _receiptTimer;
 
   @override
   void initState() {
@@ -39,6 +44,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _load();
     _connectSocket();
+    _receiptTimer =
+        Timer.periodic(const Duration(seconds: 4), (_) => _load(silent: true));
   }
 
   void _connectSocket() {
@@ -61,8 +68,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() => _loading = true);
     final history = await Api.chatMessages(widget.parentUserId);
     setState(() {
       _messages
@@ -71,8 +78,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               m['sender_user_id'] as String,
               m['body'] as String,
               DateTime.parse(m['created_at'] as String).toLocal(),
+              isRead: m['is_read'] == true,
             )));
-      _loading = false;
+      if (!silent) _loading = false;
     });
     _scrollToBottom(jump: true);
   }
@@ -116,6 +124,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _socket.dispose();
+    _receiptTimer?.cancel();
     _scrollCtrl.dispose();
     _inputCtrl.dispose();
     super.dispose();
@@ -256,9 +265,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                                 size: 13,
                                                 color: AppColors.error)
                                           else
-                                            const Icon(Icons.done,
+                                            Icon(Icons.done_all,
                                                 size: 13,
-                                                color: Colors.white70),
+                                                color: m.isRead
+                                                    ? Colors.lightBlueAccent
+                                                    : Colors.white70),
                                         ],
                                       ],
                                     ),
