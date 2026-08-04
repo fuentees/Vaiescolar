@@ -292,6 +292,8 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT tr
 -- Campos novos de rota.
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS days_of_week TEXT;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS planned_time TIME;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS planned_time_to_school TIME;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS planned_time_to_home TIME;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
 
 -- Campos novos de veiculo.

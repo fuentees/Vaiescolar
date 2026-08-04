@@ -87,12 +87,10 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> {
                               return ListTile(
                                 leading: const CircleAvatar(
                                     child: Icon(Icons.person)),
-                                title: Text(students.isNotEmpty
-                                    ? students
-                                    : t['parent_name'] as String),
+                                title: Text(t['parent_name'] as String),
                                 subtitle: Text(
                                   students.isNotEmpty
-                                      ? 'Responsável: ${t['parent_name']}\n${lastMessage ?? 'Nenhuma mensagem ainda'}'
+                                      ? '$students\n${lastMessage ?? 'Nenhuma mensagem ainda'}'
                                       : lastMessage ?? 'Nenhuma mensagem ainda',
                                   maxLines: students.isNotEmpty ? 2 : 1,
                                   overflow: TextOverflow.ellipsis,
@@ -116,9 +114,8 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> {
                                       builder: (_) => ChatScreen(
                                         parentUserId:
                                             t['parent_user_id'] as String,
-                                        parentName: students.isNotEmpty
-                                            ? '${t['parent_name']} • $students'
-                                            : t['parent_name'] as String,
+                                        parentName: t['parent_name'] as String,
+                                        studentNames: students,
                                       ),
                                     ),
                                   );

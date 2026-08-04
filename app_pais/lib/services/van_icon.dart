@@ -8,9 +8,9 @@ import '../theme.dart';
 /// icone customizado do design system funciona sem precisar gerar/incluir
 /// uma imagem binaria no repositorio.
 Future<BitmapDescriptor> buildVanMarkerIcon(
-    {double devicePixelRatio = 3.0}) async {
-  const double w = 42;
-  const double h = 30;
+    {double devicePixelRatio = 2.0}) async {
+  const double w = 30;
+  const double h = 22;
 
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder,
@@ -26,30 +26,30 @@ Future<BitmapDescriptor> buildVanMarkerIcon(
   final wheelPaint = Paint()..color = const Color(0xFF1C2B2B);
 
   final bodyRect = RRect.fromRectAndRadius(
-    const Rect.fromLTWH(2, 4, w - 4, h - 12),
-    const Radius.circular(6),
+    const Rect.fromLTWH(1, 3, w - 2, h - 9),
+    const Radius.circular(4),
   );
   canvas.drawRRect(bodyRect, bodyPaint);
   canvas.drawRRect(bodyRect, outlinePaint);
 
   canvas.drawRRect(
     RRect.fromRectAndRadius(
-        const Rect.fromLTWH(6, 7, 10, 7), const Radius.circular(2)),
+        const Rect.fromLTWH(4, 5, 7, 5), const Radius.circular(1.5)),
     windowPaint,
   );
   canvas.drawRRect(
     RRect.fromRectAndRadius(
-        const Rect.fromLTWH(19, 7, 10, 7), const Radius.circular(2)),
+        const Rect.fromLTWH(13, 5, 7, 5), const Radius.circular(1.5)),
     windowPaint,
   );
   canvas.drawRRect(
     RRect.fromRectAndRadius(
-        const Rect.fromLTWH(w - 11, 7, 7, 7), const Radius.circular(2)),
+        const Rect.fromLTWH(w - 8, 5, 5, 5), const Radius.circular(1.5)),
     windowPaint,
   );
 
-  canvas.drawCircle(const Offset(10, h - 5), 4, wheelPaint);
-  canvas.drawCircle(const Offset(w - 10, h - 5), 4, wheelPaint);
+  canvas.drawCircle(const Offset(7, h - 4), 3, wheelPaint);
+  canvas.drawCircle(const Offset(w - 7, h - 4), 3, wheelPaint);
 
   final picture = recorder.endRecording();
   final image = await picture.toImage(

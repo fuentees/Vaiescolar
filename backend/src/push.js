@@ -56,7 +56,7 @@ async function sendToUsers(userIds, title, body, data = {}) {
     data: stringData,
     android: {
       priority: 'high',
-      notification: { sound: 'default', channelId: 'vaiescolar_alerts' },
+      notification: { sound: 'default', channelId: 'vaiescolar_alerts_v2' },
     },
   });
 

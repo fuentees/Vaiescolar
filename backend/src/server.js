@@ -72,14 +72,14 @@ app.get('/health', async (_req, res) => {
 app.get('/app-version/:app', (req, res) => {
   const versions = {
     motorista: {
-      version: '0.2.1', buildNumber: 3,
+      version: '0.3.0', buildNumber: 4,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Motorista.apk',
-      notes: 'Notificações sonoras, chat com leitura e melhorias no mapa.',
+      notes: 'Chat reorganizado, horários separados de ida e volta e notificações sonoras.',
     },
     responsavel: {
-      version: '0.2.1', buildNumber: 3,
+      version: '0.3.0', buildNumber: 4,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Responsavel.zip',
-      notes: 'Notificações sonoras, chat com leitura e melhorias no mapa.',
+      notes: 'Nova tela inicial, mapa centralizado na van, marcador menor e notificações sonoras.',
     },
   };
   const version = versions[req.params.app];
@@ -693,10 +693,21 @@ app.delete('/api/students/:id', authMiddleware, requireRole('admin'), async (req
 // casa "mine" com o parametro :id e cai na rota admin-only por engano.
 app.get('/api/students/mine', authMiddleware, requireRole('parent'), async (req, res) => {
   const r = await db.query(
-    `SELECT s.id, s.name, s.home_address, sc.name AS school_name, sc.address AS school_address
+    `SELECT s.id, s.name, s.home_address, sc.name AS school_name, sc.address AS school_address,
+            schedule.route_name AS planned_route_name,
+            schedule.planned_time_to_school, schedule.planned_time_to_home,
+            schedule.days_of_week
        FROM student_guardians sg
        JOIN students s ON s.id = sg.student_id
        LEFT JOIN schools sc ON sc.id = s.school_id
+       LEFT JOIN LATERAL (
+         SELECT r.name AS route_name, r.planned_time_to_school,
+                r.planned_time_to_home, r.days_of_week
+           FROM route_students rs
+           JOIN routes r ON r.id=rs.route_id
+          WHERE rs.student_id=s.id AND r.tenant_id=sg.tenant_id AND r.active=true
+          ORDER BY r.name LIMIT 1
+       ) schedule ON true
       WHERE sg.guardian_user_id=$1 AND sg.tenant_id=$2
       ORDER BY s.name`,
     [req.auth.userId, req.auth.tenantId]
@@ -875,7 +886,8 @@ app.post('/api/students/:id/invite', authMiddleware, requireRole('admin'), async
 });
 
 app.post('/api/routes', authMiddleware, requireRole('admin'), validateBody(routeBody), async (req, res) => {
-  const { name, vehicle_id, driver_user_id, days_of_week, planned_time, active } = req.body;
+  const { name, vehicle_id, driver_user_id, days_of_week, planned_time,
+    planned_time_to_school, planned_time_to_home, active } = req.body;
 
   if (vehicle_id) {
     const v = await db.query(
@@ -893,9 +905,12 @@ app.post('/api/routes', authMiddleware, requireRole('admin'), validateBody(route
   }
 
   const r = await db.query(
-    `INSERT INTO routes(tenant_id, name, vehicle_id, driver_user_id, days_of_week, planned_time, active)
-     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [req.auth.tenantId, name, vehicle_id || null, driver_user_id || null, days_of_week || null, planned_time || null, active ?? true]
+    `INSERT INTO routes(tenant_id, name, vehicle_id, driver_user_id, days_of_week,
+                        planned_time, planned_time_to_school, planned_time_to_home, active)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [req.auth.tenantId, name, vehicle_id || null, driver_user_id || null,
+      days_of_week || null, planned_time || null, planned_time_to_school || null,
+      planned_time_to_home || null, active ?? true]
   );
   res.json(r.rows[0]);
 });
@@ -909,7 +924,8 @@ app.get('/api/routes', authMiddleware, async (req, res) => {
 });
 
 app.put('/api/routes/:id', authMiddleware, requireRole('admin'), validateBody(routeBody), async (req, res) => {
-  const { name, vehicle_id, driver_user_id, days_of_week, planned_time, active } = req.body;
+  const { name, vehicle_id, driver_user_id, days_of_week, planned_time,
+    planned_time_to_school, planned_time_to_home, active } = req.body;
   if (vehicle_id) {
     const v = await db.query('SELECT id FROM vehicles WHERE id=$1 AND tenant_id=$2', [vehicle_id, req.auth.tenantId]);
     if (v.rows.length === 0) return res.status(404).json({ error: 'veiculo nao encontrado' });
@@ -922,9 +938,14 @@ app.put('/api/routes/:id', authMiddleware, requireRole('admin'), validateBody(ro
     if (d.rows.length === 0) return res.status(404).json({ error: 'motorista nao encontrado' });
   }
   const r = await db.query(
-    `UPDATE routes SET name=$1, vehicle_id=$2, driver_user_id=$3, days_of_week=$4, planned_time=$5, active=$6
-      WHERE id=$7 AND tenant_id=$8 RETURNING *`,
-    [name, vehicle_id || null, driver_user_id || null, days_of_week || null, planned_time || null, active ?? true, req.params.id, req.auth.tenantId]
+    `UPDATE routes SET name=$1, vehicle_id=$2, driver_user_id=$3,
+            days_of_week=$4, planned_time=$5, planned_time_to_school=$6,
+            planned_time_to_home=$7, active=$8
+      WHERE id=$9 AND tenant_id=$10 RETURNING *`,
+    [name, vehicle_id || null, driver_user_id || null, days_of_week || null,
+      planned_time || null, planned_time_to_school || null,
+      planned_time_to_home || null, active ?? true, req.params.id,
+      req.auth.tenantId]
   );
   if (r.rows.length === 0) return res.status(404).json({ error: 'rota nao encontrada' });
   res.json(r.rows[0]);
@@ -1567,12 +1588,23 @@ app.get('/api/trips/mine/active', authMiddleware, requireRole('driver', 'admin')
 app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, res) => {
   const r = await db.query(
     `SELECT DISTINCT t.id AS trip_id, t.direction, t.started_at, r.name AS route_name,
-            s.id AS student_id, s.name AS student_name
+            s.id AS student_id, s.name AS student_name,
+            event.type AS last_event_type, event.at AS last_event_at,
+            location.recorded_at AS location_recorded_at
        FROM trips t
        JOIN routes r ON r.id = t.route_id
        JOIN route_students rs ON rs.route_id = t.route_id
        JOIN students s ON s.id = rs.student_id
        JOIN student_guardians sg ON sg.student_id = s.id
+       LEFT JOIN LATERAL (
+         SELECT te.type, te.at FROM trip_events te
+          WHERE te.trip_id=t.id AND te.student_id=s.id
+          ORDER BY te.at DESC LIMIT 1
+       ) event ON true
+       LEFT JOIN LATERAL (
+         SELECT tl.recorded_at FROM trip_last_location tl
+          WHERE tl.trip_id=t.id ORDER BY tl.recorded_at DESC LIMIT 1
+       ) location ON true
       WHERE t.tenant_id = $1
         AND t.status = 'active'
         AND sg.guardian_user_id = $2

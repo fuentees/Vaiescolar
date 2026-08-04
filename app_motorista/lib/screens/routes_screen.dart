@@ -88,7 +88,8 @@ class _RoutesScreenState extends State<RoutesScreen> {
                       itemBuilder: (context, i) {
                         final r = _routes[i] as Map<String, dynamic>;
                         final active = r['active'] as bool? ?? true;
-                        final plannedTime = r['planned_time'] as String?;
+                        final toSchool = r['planned_time_to_school'] as String?;
+                        final toHome = r['planned_time_to_home'] as String?;
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 6),
@@ -103,8 +104,10 @@ class _RoutesScreenState extends State<RoutesScreen> {
                             subtitle: Text(
                               [
                                 if (!active) 'Inativa',
-                                if (plannedTime != null)
-                                  'Horario: ${plannedTime.substring(0, 5)}',
+                                if (toSchool != null)
+                                  'Ida: ${toSchool.substring(0, 5)}',
+                                if (toHome != null)
+                                  'Volta: ${toHome.substring(0, 5)}',
                               ].join(' · '),
                             ),
                             trailing: PopupMenuButton<String>(
@@ -148,7 +151,8 @@ class _RouteFormDialogState extends State<_RouteFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
   final Set<int> _selectedDays = {};
-  TimeOfDay? _plannedTime;
+  TimeOfDay? _timeToSchool;
+  TimeOfDay? _timeToHome;
   bool _active = true;
   bool _saving = false;
   String? _error;
@@ -166,12 +170,21 @@ class _RouteFormDialogState extends State<_RouteFormDialog> {
       _selectedDays
           .addAll(days.split(',').map((d) => int.tryParse(d)).whereType<int>());
     }
-    final timeStr = e?['planned_time'] as String?;
-    if (timeStr != null) {
-      final parts = timeStr.split(':');
+    final timeToSchool = e?['planned_time_to_school'] as String?;
+    if (timeToSchool != null) {
+      final parts = timeToSchool.split(':');
       if (parts.length >= 2) {
-        _plannedTime = TimeOfDay(
+        _timeToSchool = TimeOfDay(
             hour: int.tryParse(parts[0]) ?? 7,
+            minute: int.tryParse(parts[1]) ?? 0);
+      }
+    }
+    final timeToHome = e?['planned_time_to_home'] as String?;
+    if (timeToHome != null) {
+      final parts = timeToHome.split(':');
+      if (parts.length >= 2) {
+        _timeToHome = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 17,
             minute: int.tryParse(parts[1]) ?? 0);
       }
     }
@@ -183,11 +196,15 @@ class _RouteFormDialogState extends State<_RouteFormDialog> {
     super.dispose();
   }
 
-  Future<void> _pickTime() async {
+  Future<void> _pickTime({required bool toSchool}) async {
     final chosen = await showTimePicker(
         context: context,
-        initialTime: _plannedTime ?? const TimeOfDay(hour: 7, minute: 0));
-    if (chosen != null) setState(() => _plannedTime = chosen);
+        initialTime: toSchool
+            ? (_timeToSchool ?? const TimeOfDay(hour: 7, minute: 0))
+            : (_timeToHome ?? const TimeOfDay(hour: 17, minute: 0)));
+    if (chosen != null) {
+      setState(() => toSchool ? _timeToSchool = chosen : _timeToHome = chosen);
+    }
   }
 
   Future<void> _save() async {
@@ -199,9 +216,9 @@ class _RouteFormDialogState extends State<_RouteFormDialog> {
     final daysStr = _selectedDays.isEmpty
         ? null
         : (_selectedDays.toList()..sort()).join(',');
-    final timeStr = _plannedTime != null
-        ? '${_plannedTime!.hour.toString().padLeft(2, '0')}:${_plannedTime!.minute.toString().padLeft(2, '0')}'
-        : null;
+    String? encodeTime(TimeOfDay? time) => time == null
+        ? null
+        : '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
     final bool ok;
     if (_isEditing) {
       ok = await Api.updateRoute(
@@ -210,12 +227,16 @@ class _RouteFormDialogState extends State<_RouteFormDialog> {
         vehicleId: widget.existing!['vehicle_id'] as String?,
         driverUserId: widget.existing!['driver_user_id'] as String?,
         daysOfWeek: daysStr,
-        plannedTime: timeStr,
+        plannedTimeToSchool: encodeTime(_timeToSchool),
+        plannedTimeToHome: encodeTime(_timeToHome),
         active: _active,
       );
     } else {
       ok = await Api.createRoute(_nameCtrl.text.trim(),
-          daysOfWeek: daysStr, plannedTime: timeStr, active: _active);
+          daysOfWeek: daysStr,
+          plannedTimeToSchool: encodeTime(_timeToSchool),
+          plannedTimeToHome: encodeTime(_timeToHome),
+          active: _active);
     }
     if (!mounted) return;
     if (ok) {
@@ -266,13 +287,24 @@ class _RouteFormDialogState extends State<_RouteFormDialog> {
               ),
               const SizedBox(height: 12),
               InkWell(
-                onTap: _pickTime,
+                onTap: () => _pickTime(toSchool: true),
                 child: InputDecorator(
                   decoration: const InputDecoration(
-                      labelText: 'Horario planejado (opcional)'),
-                  child: Text(_plannedTime == null
+                      labelText: 'Horário de ida (opcional)'),
+                  child: Text(_timeToSchool == null
                       ? '--'
-                      : _plannedTime!.format(context)),
+                      : _timeToSchool!.format(context)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () => _pickTime(toSchool: false),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                      labelText: 'Horário de volta (opcional)'),
+                  child: Text(_timeToHome == null
+                      ? '--'
+                      : _timeToHome!.format(context)),
                 ),
               ),
               const SizedBox(height: 8),

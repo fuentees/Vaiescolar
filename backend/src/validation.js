@@ -75,6 +75,8 @@ const routeBody = z.object({
   driver_user_id: z.string().nullable().optional(),
   days_of_week: z.string().max(20).nullable().optional(),
   planned_time: z.string().nullable().optional(),
+  planned_time_to_school: z.string().nullable().optional(),
+  planned_time_to_home: z.string().nullable().optional(),
   active: z.boolean().optional(),
 });
 

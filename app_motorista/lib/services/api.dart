@@ -294,6 +294,8 @@ class Api {
     String name, {
     String? daysOfWeek,
     String? plannedTime,
+    String? plannedTimeToSchool,
+    String? plannedTimeToHome,
     bool active = true,
   }) async {
     final res = await http.post(
@@ -306,6 +308,8 @@ class Api {
         'name': name,
         'days_of_week': daysOfWeek,
         'planned_time': plannedTime,
+        'planned_time_to_school': plannedTimeToSchool,
+        'planned_time_to_home': plannedTimeToHome,
         'active': active,
       }),
     );
@@ -319,6 +323,8 @@ class Api {
     String? driverUserId,
     String? daysOfWeek,
     String? plannedTime,
+    String? plannedTimeToSchool,
+    String? plannedTimeToHome,
     bool active = true,
   }) async {
     final res = await http.put(
@@ -333,6 +339,8 @@ class Api {
         'driver_user_id': driverUserId,
         'days_of_week': daysOfWeek,
         'planned_time': plannedTime,
+        'planned_time_to_school': plannedTimeToSchool,
+        'planned_time_to_home': plannedTimeToHome,
         'active': active,
       }),
     );

@@ -155,8 +155,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                                     MaterialPageRoute(
                                       builder: (_) => ChatScreen(
                                         parentUserId: g['id'] as String,
-                                        parentName:
-                                            '${g['name']} • ${s['name']}',
+                                        parentName: g['name'] as String,
+                                        studentNames: s['name'] as String,
                                       ),
                                     ),
                                   ),

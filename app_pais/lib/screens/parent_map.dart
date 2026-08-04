@@ -144,6 +144,11 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
         }
       }
     });
+    if (_hasPosition) {
+      await _map?.animateCamera(
+        CameraUpdate.newLatLngZoom(_pos, 17),
+      );
+    }
   }
 
   // Geocodifica o endereco de casa (do 1o filho desta viagem) e da escola,
@@ -214,7 +219,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
         _pos = to;
         _hasPosition = true;
       });
-      _map?.animateCamera(CameraUpdate.newLatLng(_pos));
+      _map?.animateCamera(CameraUpdate.newLatLngZoom(_pos, 17));
       return;
     }
     const steps = 20;
@@ -259,7 +264,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
   }
 
   void _centerOnVan() {
-    _map?.animateCamera(CameraUpdate.newLatLng(_pos));
+    _map?.animateCamera(CameraUpdate.newLatLngZoom(_pos, 17));
   }
 
   @override
@@ -310,9 +315,14 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
             child: Stack(
               children: [
                 GoogleMap(
-                  initialCameraPosition: CameraPosition(target: _pos, zoom: 15),
+                  initialCameraPosition: CameraPosition(target: _pos, zoom: 17),
                   style: _mapStyle,
-                  onMapCreated: (c) => _map = c,
+                  onMapCreated: (c) {
+                    _map = c;
+                    if (_hasPosition) {
+                      c.animateCamera(CameraUpdate.newLatLngZoom(_pos, 17));
+                    }
+                  },
                   markers: {
                     Marker(
                       markerId: const MarkerId('van'),

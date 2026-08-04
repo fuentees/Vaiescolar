@@ -18,7 +18,7 @@ typedef PushForegroundHandler = void Function(
 class PushService {
   static final _local = FlutterLocalNotificationsPlugin();
   static const _channel = AndroidNotificationChannel(
-    'vaiescolar_alerts',
+    'vaiescolar_alerts_v2',
     'Alertas VaiEscolar',
     description: 'Embarques, desembarques, aproximações e mensagens',
     importance: Importance.max,
@@ -65,7 +65,7 @@ class PushService {
           body: notification.body,
           notificationDetails: const NotificationDetails(
             android: AndroidNotificationDetails(
-              'vaiescolar_alerts',
+              'vaiescolar_alerts_v2',
               'Alertas VaiEscolar',
               channelDescription:
                   'Embarques, desembarques, aproximações e mensagens',

@@ -22,8 +22,12 @@ class _Msg {
 class ChatScreen extends StatefulWidget {
   final String parentUserId;
   final String parentName;
+  final String? studentNames;
   const ChatScreen(
-      {super.key, required this.parentUserId, required this.parentName});
+      {super.key,
+      required this.parentUserId,
+      required this.parentName,
+      this.studentNames});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -145,7 +149,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.parentName)),
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.parentName),
+            if (widget.studentNames?.isNotEmpty == true)
+              Text(
+                widget.studentNames!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Container(
