@@ -73,12 +73,12 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.3', buildNumber: 4009, releaseBuild: 9,
+      version: '1.0.4', buildNumber: 4010, releaseBuild: 10,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
       notes: 'Correção da verificação automática de atualizações.',
     },
     responsavel: {
-      version: '1.0.3', buildNumber: 4009, releaseBuild: 9,
+      version: '1.0.4', buildNumber: 4010, releaseBuild: 10,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
       notes: 'Correção da verificação automática de atualizações.',
     },
@@ -1556,6 +1556,32 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
 
 // Motorista so finaliza a propria viagem; admin finaliza qualquer uma do tenant.
 app.post('/api/trips/:id/finish', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const pending = await db.query(
+    `SELECT s.id, s.name
+       FROM trips t
+       JOIN route_students rs ON rs.route_id=t.route_id
+       JOIN students s ON s.id=rs.student_id
+       LEFT JOIN absences ab ON ab.student_id=s.id AND ab.date=t.started_at::date
+      WHERE t.id=$1 AND t.tenant_id=$2 AND t.status='active'
+        AND ($3='admin' OR t.driver_user_id=$4)
+        AND ab.id IS NULL
+        AND EXISTS (
+          SELECT 1 FROM trip_events te
+           WHERE te.trip_id=t.id AND te.student_id=s.id AND te.type='boarded'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM trip_events te
+           WHERE te.trip_id=t.id AND te.student_id=s.id AND te.type='dropped'
+        )
+      ORDER BY rs.position, s.name`,
+    [req.params.id, req.auth.tenantId, req.auth.role, req.auth.userId]
+  );
+  if (pending.rows.length > 0) {
+    return res.status(409).json({
+      error: 'confirme o desembarque de todos os alunos antes de finalizar',
+      pendingStudents: pending.rows
+    });
+  }
   const r = await db.query(
     `UPDATE trips SET status='finished', finished_at=now()
      WHERE id=$1 AND tenant_id=$2 AND ($3='admin' OR driver_user_id=$4)

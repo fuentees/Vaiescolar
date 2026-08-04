@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/host_actions.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'login_screen.dart';
@@ -183,6 +184,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: const Icon(Icons.lock_outline),
                   label: const Text('Trocar senha'),
                 ),
+                if (HostActions.switchProfile != null) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => HostActions.switchProfile?.call(),
+                    icon: const Icon(Icons.swap_horiz_rounded),
+                    label: const Text('Trocar tipo de acesso'),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: _logout,

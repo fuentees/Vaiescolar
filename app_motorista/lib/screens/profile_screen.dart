@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:app_pais/services/host_actions.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'device_status_screen.dart';
@@ -121,6 +122,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _switchProfile() async {
+    await HostActions.switchProfile?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -204,6 +209,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: _openChangePasswordDialog,
                   icon: const Icon(Icons.lock_outline),
                   label: const Text('Trocar senha'),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _switchProfile,
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  label: const Text('Trocar tipo de acesso'),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(

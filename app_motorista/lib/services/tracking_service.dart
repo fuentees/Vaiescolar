@@ -77,6 +77,7 @@ class TrackingService {
   static String? _direction;
   static bool _initialized = false;
   static bool _evaluatingProximity = false;
+  static String? startFailureReason;
   static List<_ProximityStop> _stops = [];
 
   /// Estado do ultimo envio de GPS -- consumido pela tela de rota ativa pra
@@ -108,12 +109,23 @@ class TrackingService {
   }
 
   static Future<bool> _ensurePermissions() async {
+    startFailureReason = null;
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      startFailureReason =
+          'O GPS do celular está desligado. Ative a Localização e tente novamente.';
+      gpsOnline.value = false;
+      return false;
+    }
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
+      startFailureReason = permission == LocationPermission.deniedForever
+          ? 'A localização foi bloqueada. Abra Configurações > Apps > VaiEscolar > Permissões e permita a localização.'
+          : 'Permissão de localização negada. Permita o acesso para iniciar a rota.';
+      gpsOnline.value = false;
       return false;
     }
 
@@ -164,6 +176,7 @@ class TrackingService {
     );
     _positionSub =
         Geolocator.getPositionStream(locationSettings: settings).listen((pos) {
+      gpsOnline.value = true;
       OfflineQueue.enqueue({
         'lat': pos.latitude,
         'lng': pos.longitude,
@@ -174,6 +187,9 @@ class TrackingService {
       });
       _flush();
       _evaluateProximity(pos);
+    }, onError: (_) {
+      gpsOnline.value = false;
+      proximityStatus.value = 'GPS sem sinal — verificando novamente';
     });
 
     _flushTimer = Timer.periodic(const Duration(seconds: 15), (_) => _flush());

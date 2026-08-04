@@ -4,6 +4,7 @@ import 'package:app_pais/screens/parent_map.dart' as parent_map;
 import 'package:app_pais/services/api.dart' as parent_api;
 import 'package:app_pais/services/api_http.dart' as parent_http;
 import 'package:app_pais/services/push_service.dart' as parent_push;
+import 'package:app_pais/services/host_actions.dart' as parent_host;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -63,6 +64,17 @@ Future<void> main() async {
       () => handleUnauthorized(AppProfile.driver);
   parent_http.ApiHttp.onUnauthorized =
       () => handleUnauthorized(AppProfile.parent);
+  parent_host.HostActions.switchProfile = () async {
+    await Future.wait([
+      driver_api.Api.logout(),
+      parent_api.Api.logout(),
+      ProfileMode.clear(),
+    ]);
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const ProfileSelectorScreen()),
+      (_) => false,
+    );
+  };
   _initPushInBackground(_initialProfile);
   runApp(const VaiEscolarApp());
 }

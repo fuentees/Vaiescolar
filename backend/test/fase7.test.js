@@ -61,7 +61,11 @@ before(async () => {
   const trip = await post('/api/trips/start', { route_id: routeId, direction: 'to_school' }, driverToken).then((r) => r.json());
   tripId = trip.tripId;
   await post(`/api/trips/${tripId}/events`, { student_id: studentId, type: 'boarded' }, driverToken);
-  await post(`/api/trips/${tripId}/finish`, {}, driverToken);
+  const prematureFinish = await post(`/api/trips/${tripId}/finish`, {}, driverToken);
+  assert.equal(prematureFinish.status, 409);
+  await post(`/api/trips/${tripId}/events`, { student_id: studentId, type: 'dropped' }, driverToken);
+  const finish = await post(`/api/trips/${tripId}/finish`, {}, driverToken);
+  assert.equal(finish.status, 200);
 });
 
 after(async () => {
@@ -77,7 +81,7 @@ test('GET /api/trips/history exige studentId e retorna a viagem finalizada do al
   const res = await get(`/api/trips/history?studentId=${studentId}`, parentToken).then((r) => r.json());
   assert.equal(res.length, 1);
   assert.equal(res[0].id, tripId);
-  assert.equal(res[0].last_event_type, 'boarded');
+  assert.equal(res[0].last_event_type, 'dropped');
 });
 
 test('GET /api/trips/history rejeita pai sem vinculo com o aluno (403)', async () => {

@@ -216,8 +216,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       } else {
         await Api.finishTrip(tripId);
         if (!mounted) return;
-        setState(() => _error =
-            'Permissao de localizacao negada. Ative-a para iniciar a rota.');
+        setState(() => _error = TrackingService.startFailureReason ??
+            'Não foi possível ativar a localização. Verifique o GPS e as permissões do app.');
       }
     } else {
       // Pode ter sido uma segunda tentativa concorrente. O backend devolve
@@ -284,10 +284,14 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       _busy = true;
       _error = null;
     });
-    await TrackingService.stopTracking();
     final ok = await Api.finishTrip(_activeTripId!);
     if (!mounted) return;
     if (ok) {
+      // O rastreamento só pode parar depois que o servidor confirmar o fim.
+      // Em uma falha de internet, a viagem continua ativa e o responsável
+      // não fica sem localização enquanto o motorista tenta novamente.
+      await TrackingService.stopTracking();
+      if (!mounted) return;
       _stopClock();
       setState(() {
         _activeTripId = null;
@@ -302,7 +306,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       // finalizar com sucesso, permitindo tentar de novo.
       setState(() {
         _busy = false;
-        _error = 'Nao foi possivel finalizar a rota. Tente novamente.';
+        _error = 'Não foi possível finalizar. Confirme o desembarque de todos os alunos e tente novamente.';
       });
     }
   }
