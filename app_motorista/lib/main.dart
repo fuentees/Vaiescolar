@@ -64,8 +64,10 @@ Future<void> main() async {
 
   driver_http.ApiHttp.onUnauthorized =
       () => handleUnauthorized(AppProfile.driver);
+  driver_http.ApiHttp.currentToken = () => driver_api.Api.token;
   parent_http.ApiHttp.onUnauthorized =
       () => handleUnauthorized(AppProfile.parent);
+  parent_http.ApiHttp.currentToken = () => parent_api.Api.token;
   parent_host.HostActions.switchProfile = () async {
     await Future.wait([
       driver_api.Api.logout(),

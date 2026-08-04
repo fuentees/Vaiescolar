@@ -61,8 +61,10 @@ class _LoginScreenState extends State<LoginScreen> {
         await RememberedLogin.clear();
       }
       if (!mounted) return;
-      Navigator.of(context)
-          .pushReplacement(MaterialPageRoute(builder: (_) => const AppShell()));
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AppShell()),
+        (_) => false,
+      );
       unawaited(_initPush());
     } else {
       setState(() => _error = 'E-mail ou senha incorretos.');
@@ -170,7 +172,8 @@ class _LoginScreenState extends State<LoginScreen> {
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
               title: const Text('Lembrar e-mail e senha'),
-              subtitle: const Text('Protegidos pelo armazenamento seguro do celular'),
+              subtitle:
+                  const Text('Protegidos pelo armazenamento seguro do celular'),
             ),
             if (_error != null)
               Padding(

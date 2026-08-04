@@ -9,9 +9,11 @@ class ApiHttp {
 
   static const timeout = Duration(seconds: 15);
   static Future<void> Function()? onUnauthorized;
+  static String? Function()? currentToken;
   static bool _handlingUnauthorized = false;
 
-  static Future<base.Response> _run(Future<base.Response> request) async {
+  static Future<base.Response> _run(
+      Future<base.Response> request, Map<String, String>? headers) async {
     late final base.Response response;
     try {
       response = await request.timeout(timeout);
@@ -25,7 +27,15 @@ class ApiHttp {
       return base.Response('{"error":"offline"}', 599,
           headers: const {'x-api-offline': '1'});
     }
-    if (response.statusCode == 401 && !_handlingUnauthorized) {
+    final authorization =
+        headers?['authorization'] ?? headers?['Authorization'];
+    final requestToken = authorization?.startsWith('Bearer ') == true
+        ? authorization!.substring(7)
+        : null;
+    if (response.statusCode == 401 &&
+        requestToken != null &&
+        requestToken == currentToken?.call() &&
+        !_handlingUnauthorized) {
       _handlingUnauthorized = true;
       try {
         await onUnauthorized?.call();
@@ -37,16 +47,19 @@ class ApiHttp {
   }
 
   static Future<base.Response> get(Uri url, {Map<String, String>? headers}) =>
-      _run(base.get(url, headers: headers));
+      _run(base.get(url, headers: headers), headers);
   static Future<base.Response> post(Uri url,
           {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
-      _run(base.post(url, headers: headers, body: body, encoding: encoding));
+      _run(base.post(url, headers: headers, body: body, encoding: encoding),
+          headers);
   static Future<base.Response> put(Uri url,
           {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
-      _run(base.put(url, headers: headers, body: body, encoding: encoding));
+      _run(base.put(url, headers: headers, body: body, encoding: encoding),
+          headers);
   static Future<base.Response> delete(Uri url,
           {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
-      _run(base.delete(url, headers: headers, body: body, encoding: encoding));
+      _run(base.delete(url, headers: headers, body: body, encoding: encoding),
+          headers);
 }
 
 Future<base.Response> get(Uri url, {Map<String, String>? headers}) =>

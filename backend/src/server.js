@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.16', buildNumber: 4022, releaseBuild: 22,
+      version: '1.0.17', buildNumber: 4023, releaseBuild: 23,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Prepara pagamentos com PIX manual e Mercado Pago, credenciais cifradas e confirmação automática.',
+      notes: 'Corrige retorno indevido à seleção de perfil após o login em alguns celulares.',
     },
     responsavel: {
-      version: '1.0.16', buildNumber: 4022, releaseBuild: 22,
+      version: '1.0.17', buildNumber: 4023, releaseBuild: 23,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Prepara pagamentos com PIX manual e Mercado Pago, credenciais cifradas e confirmação automática.',
+      notes: 'Corrige retorno indevido à seleção de perfil após o login em alguns celulares.',
     },
   };
   const version = versions[req.params.app];

@@ -87,6 +87,7 @@ class Api {
     );
     if (res.statusCode == 200) {
       final body = jsonDecode(res.body);
+      if (body['role'] != 'admin' && body['role'] != 'driver') return false;
       await _saveSession(body['token'] as String, body['userId'] as String,
           body['role'] as String);
       return true;
