@@ -31,6 +31,7 @@ class _ActiveTrip {
   final double? speedMetersPerSecond;
   final double? targetLat;
   final double? targetLng;
+  final bool emergencyReturnActive;
 
   _ActiveTrip({
     required this.tripId,
@@ -44,9 +45,11 @@ class _ActiveTrip {
     this.speedMetersPerSecond,
     this.targetLat,
     this.targetLng,
+    this.emergencyReturnActive = false,
   });
 
   String get status {
+    if (emergencyReturnActive) return 'Retorno de emergência para casa';
     if (lastEventType == 'boarded') {
       return direction == 'to_school'
           ? 'Na van · indo para a escola'
@@ -151,6 +154,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
         speedMetersPerSecond: number('current_speed'),
         targetLat: number('target_lat'),
         targetLng: number('target_lng'),
+        emergencyReturnActive: row['emergency_return_active'] == true,
       );
     }
   }
@@ -275,6 +279,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
           studentNames: {child['id'] as String: child['name'] as String},
           direction: trip.direction,
           routeName: trip.routeName,
+          emergencyReturn: trip.emergencyReturnActive,
         ),
       ),
     );

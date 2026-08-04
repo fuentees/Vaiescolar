@@ -421,6 +421,42 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     if (mounted) setState(() => _busyStudentIds.remove(studentId));
   }
 
+  Future<void> _startEmergencyReturn(String studentId, String name) async {
+    final tripId = _activeTripId;
+    if (tripId == null) return;
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Retorno de emergência — $name'),
+        content: TextField(
+          controller: reasonController,
+          maxLength: 500,
+          decoration: const InputDecoration(
+            labelText: 'Motivo (opcional)',
+            hintText: 'Ex.: aluno passou mal',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Iniciar retorno')),
+        ],
+      ),
+    );
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
+    if (confirmed != true) return;
+    setState(() => _busyStudentIds.add(studentId));
+    final ok = await Api.startEmergencyReturn(
+        tripId, studentId, reason.isEmpty ? null : reason);
+    if (ok) {
+      HapticFeedback.mediumImpact();
+      await _loadStudents();
+      await TrackingService.refreshProximityStops();
+    }
+    if (mounted) setState(() => _busyStudentIds.remove(studentId));
+  }
+
   @override
   Widget build(BuildContext context) {
     final tracking = _activeTripId != null;
@@ -619,12 +655,15 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                       final id = s['id'] as String;
                       final name = s['name'] as String;
                       final status = s['last_status'] as String?;
+                      final emergencyReturn = s['emergency_return_active'] == true;
                       final absent = s['absent'] == true;
                       final address = s['home_address'] as String?;
                       final emergencyPhone =
                           s['emergency_contact_phone'] as String?;
                       final busy = _busyStudentIds.contains(id);
-                      final statusLabel = status == 'boarded'
+                      final statusLabel = emergencyReturn
+                          ? 'Retorno de emergência para casa'
+                          : status == 'boarded'
                           ? 'Embarcou'
                           : status == 'dropped'
                               ? 'Desceu'
@@ -724,6 +763,25 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                     ),
                                   ),
                                 )
+                              else if (emergencyReturn)
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: () => _mark(id, name, 'dropped', status),
+                                    icon: const Icon(Icons.home_rounded),
+                                    label: const Text('Chegou em casa'),
+                                  ),
+                                )
+                              else if (status == 'dropped')
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+                                    onPressed: () => _startEmergencyReturn(id, name),
+                                    icon: const Icon(Icons.emergency_rounded),
+                                    label: const Text('Retorno de emergência'),
+                                  ),
+                                )
                               else
                                 Row(children: [
                                   Expanded(
@@ -746,7 +804,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                     ),
                                   ),
                                 ]),
-                              if (!busy && status != null)
+                              if (!busy && status != null && !emergencyReturn)
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: TextButton.icon(

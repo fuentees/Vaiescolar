@@ -71,6 +71,12 @@ class LiveLocation {
           msg['studentName'] as String,
           DateTime.parse(msg['createdAt'] as String).toLocal(),
         ));
+      } else if (msg['type'] == 'emergency_return') {
+        _eventController.add(TripEvent(
+          msg['studentId'] as String,
+          'emergency_return',
+          DateTime.parse(msg['createdAt'] as String).toLocal(),
+        ));
       } else if (msg['type'] == 'trip_finished') {
         _finishedController.add(null);
       }

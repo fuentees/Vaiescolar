@@ -209,6 +209,17 @@ CREATE INDEX IF NOT EXISTS idx_events_trip ON trip_events(trip_id, at);
 -- rastreabilidade sem alterar eventos antigos, que ficam com valor nulo.
 ALTER TABLE trip_events ADD COLUMN IF NOT EXISTS received_by TEXT;
 
+CREATE TABLE IF NOT EXISTS trip_emergency_returns (
+  trip_id       UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  reason        TEXT,
+  active        BOOLEAN NOT NULL DEFAULT true,
+  started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at   TIMESTAMPTZ,
+  PRIMARY KEY (trip_id, student_id)
+);
+
 -- Alertas operacionais enviados pelo motorista antes de chegar a uma parada.
 -- A chave unica impede toque duplo de disparar duas notificacoes iguais.
 CREATE TABLE IF NOT EXISTS trip_alerts (

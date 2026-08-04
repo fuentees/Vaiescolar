@@ -19,6 +19,7 @@ class ParentMap extends StatefulWidget {
   final Map<String, String> studentNames;
   final String? direction; // 'to_school' ou 'to_home'
   final String? routeName;
+  final bool emergencyReturn;
   const ParentMap({
     super.key,
     required this.token,
@@ -26,6 +27,7 @@ class ParentMap extends StatefulWidget {
     this.studentNames = const {},
     this.direction,
     this.routeName,
+    this.emergencyReturn = false,
   });
 
   @override
@@ -56,6 +58,10 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
     _statusText = widget.direction == 'to_home'
         ? 'Voltando para casa'
         : 'A caminho da escola';
+    _studentOnBoard = widget.emergencyReturn;
+    if (widget.emergencyReturn) {
+      _statusText = 'Retorno de emergência para casa';
+    }
     _loadMapStyle().then((style) {
       if (!mounted) return;
       setState(() => _mapStyle = style);
@@ -126,6 +132,8 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
   Future<void> _loadInitialState() async {
     final active = await Api.activeTrips();
     final stillActive = active.any((t) => t['trip_id'] == widget.tripId);
+    final emergencyActive = active.any((t) =>
+        t['trip_id'] == widget.tripId && t['emergency_return_active'] == true);
     final last = await Api.tripLocation(widget.tripId);
     final events = await Api.tripEvents(widget.tripId);
     if (!mounted) return;
@@ -134,6 +142,10 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
       return;
     }
     setState(() {
+      if (emergencyActive) {
+        _studentOnBoard = true;
+        _statusText = 'Retorno de emergência para casa';
+      }
       if (last != null) {
         _pos = LatLng(
             (last['lat'] as num).toDouble(), (last['lng'] as num).toDouble());
@@ -145,6 +157,10 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
       if (events.isNotEmpty) {
         final lastEvent = events.last;
         _studentOnBoard = lastEvent['type'] == 'boarded';
+        if (widget.emergencyReturn) {
+          _studentOnBoard = true;
+          _statusText = 'Retorno de emergência para casa';
+        }
         final eventAt = DateTime.parse(lastEvent['at'] as String).toLocal();
         if (_statusAt == null || eventAt.isAfter(_statusAt!)) {
           final studentName = lastEvent['student_name'] as String;
@@ -251,13 +267,18 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
   }
 
   void _onEvent(TripEvent e) {
-    if (!widget.studentNames.containsKey(e.studentId)) return;
+    if (widget.studentNames.isNotEmpty &&
+        !widget.studentNames.containsKey(e.studentId)) {
+      return;
+    }
     final name = widget.studentNames[e.studentId] ?? 'Aluno';
-    final action = e.type == 'boarded' ? 'embarcou' : 'chegou / desceu';
+    final action = e.type == 'emergency_return'
+        ? 'retorno de emergência para casa'
+        : e.type == 'boarded' ? 'embarcou' : 'chegou / desceu';
     setState(() {
       _statusText = '$name $action';
       _statusAt = DateTime.now();
-      _studentOnBoard = e.type == 'boarded';
+      _studentOnBoard = e.type == 'boarded' || e.type == 'emergency_return';
       if (e.type == 'dropped') _tripFinished = true;
     });
   }

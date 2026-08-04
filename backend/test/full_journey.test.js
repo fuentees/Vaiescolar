@@ -169,11 +169,11 @@ test('fluxo completo de cadastro, mensalidade, ida e volta', async () => {
   const report = await json('GET', '/api/reports/trips?limit=10', undefined, adminToken);
   const testedTrips = report.filter((trip) => tripIds.includes(trip.id));
   assert.equal(testedTrips.length, 2);
-  assert.ok(testedTrips.every((trip) => Number(trip.event_count) === 2));
+  assert.deepEqual(testedTrips.map((trip) => Number(trip.event_count)).sort(), [2, 4]);
 
   const notifications = await json('GET', '/api/notifications?limit=30', undefined, parentToken);
   assert.equal(notifications.filter((item) => item.type === 'approaching').length, 2);
-  assert.equal(notifications.filter((item) => item.type === 'trip_event').length, 4);
+  assert.equal(notifications.filter((item) => item.type === 'trip_event').length, 6);
 });
 
 async function executeTrip(direction, points) {
@@ -238,6 +238,23 @@ async function executeTrip(direction, points) {
 
   const activeAfterDrop = await json('GET', '/api/trips/active', undefined, parentToken);
   assert.equal(activeAfterDrop.some((trip) => trip.student_id === studentId), false);
+
+  if (direction === 'to_school') {
+    const emergency = await json('POST',
+      `/api/trips/${tripId}/students/${studentId}/emergency-return`,
+      { reason: 'Aluno passou mal' }, driverToken);
+    assert.equal(emergency.ok, true);
+    const activeEmergency = await json('GET', '/api/trips/active', undefined, parentToken);
+    const emergencyTrip = activeEmergency.find((item) => item.student_id === studentId);
+    assert.equal(emergencyTrip.emergency_return_active, true);
+    assert.equal(emergencyTrip.target_lat, -23.5588);
+
+    await json('POST', `/api/trips/${tripId}/events`, {
+      student_id: studentId, type: 'dropped', lat: -23.5500, lng: -46.6300,
+    }, driverToken);
+    const inactiveAgain = await json('GET', '/api/trips/active', undefined, parentToken);
+    assert.equal(inactiveAgain.some((trip) => trip.student_id === studentId), false);
+  }
 
   const finishedPromise = nextSocketMessage(ws, 'trip_finished');
   await json('POST', `/api/trips/${tripId}/finish`, {}, driverToken);

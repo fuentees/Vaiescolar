@@ -208,6 +208,19 @@ class Api {
     return res.statusCode == 200;
   }
 
+  static Future<bool> startEmergencyReturn(
+      String tripId, String studentId, String? reason) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/trips/$tripId/students/$studentId/emergency-return'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json',
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+    return res.statusCode == 200;
+  }
+
   static Future<bool> sendApproachingAlert(
       String tripId, String studentId) async {
     final res = await http.post(

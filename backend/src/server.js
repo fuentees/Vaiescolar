@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.10', buildNumber: 4016, releaseBuild: 16,
+      version: '1.0.11', buildNumber: 4017, releaseBuild: 17,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Atualiza a rota imediatamente ao receber a notificação, com consulta de segurança a cada 5 segundos.',
+      notes: 'Adiciona retorno de emergência do aluno para casa com acompanhamento e alerta urgente.',
     },
     responsavel: {
-      version: '1.0.10', buildNumber: 4016, releaseBuild: 16,
+      version: '1.0.11', buildNumber: 4017, releaseBuild: 17,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Atualiza a rota imediatamente ao receber a notificação, com consulta de segurança a cada 5 segundos.',
+      notes: 'Adiciona retorno de emergência do aluno para casa com acompanhamento e alerta urgente.',
     },
   };
   const version = versions[req.params.app];
@@ -1691,8 +1691,12 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
             location.recorded_at AS location_recorded_at,
             location.lat AS current_lat, location.lng AS current_lng,
             location.speed AS current_speed,
-            CASE WHEN t.direction='to_school' THEN sc.lat ELSE s.home_lat END AS target_lat,
-            CASE WHEN t.direction='to_school' THEN sc.lng ELSE s.home_lng END AS target_lng
+            COALESCE(er.active, false) AS emergency_return_active,
+            er.reason AS emergency_return_reason,
+            CASE WHEN COALESCE(er.active, false) THEN s.home_lat
+                 WHEN t.direction='to_school' THEN sc.lat ELSE s.home_lat END AS target_lat,
+            CASE WHEN COALESCE(er.active, false) THEN s.home_lng
+                 WHEN t.direction='to_school' THEN sc.lng ELSE s.home_lng END AS target_lng
        FROM trips t
        JOIN routes r ON r.id = t.route_id
        JOIN route_students rs ON rs.route_id = t.route_id
@@ -1708,10 +1712,12 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
          SELECT tl.recorded_at, tl.lat, tl.lng, tl.speed FROM trip_last_location tl
           WHERE tl.trip_id=t.id ORDER BY tl.recorded_at DESC LIMIT 1
        ) location ON true
+       LEFT JOIN trip_emergency_returns er
+         ON er.trip_id=t.id AND er.student_id=s.id
       WHERE t.tenant_id = $1
         AND t.status = 'active'
         AND sg.guardian_user_id = $2
-        AND COALESCE(event.type, '') <> 'dropped'
+        AND (COALESCE(event.type, '') <> 'dropped' OR COALESCE(er.active, false))
       ORDER BY t.started_at DESC`,
     [req.auth.tenantId, req.auth.userId]
   );
@@ -1727,6 +1733,7 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
               WHERE te.trip_id = $1 AND te.student_id = s.id
               ORDER BY te.at DESC LIMIT 1) AS last_status,
             (ab.id IS NOT NULL) AS absent,
+            COALESCE(er.active, false) AS emergency_return_active,
             EXISTS(SELECT 1 FROM trip_alerts ta
                     WHERE ta.trip_id=$1 AND ta.student_id=s.id
                       AND ta.type='approaching_5min') AS approaching_alert_sent
@@ -1735,11 +1742,63 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
        JOIN students s ON s.id = rs.student_id
        LEFT JOIN absences ab ON ab.student_id = s.id
         AND ab.date = (t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
+       LEFT JOIN trip_emergency_returns er
+         ON er.trip_id=t.id AND er.student_id=s.id
       WHERE t.id = $1 AND t.tenant_id = $2
       ORDER BY rs.position, s.name`,
     [req.params.id, req.auth.tenantId]
   );
   res.json(r.rows);
+});
+
+// Reativa o acompanhamento de uma criança que já havia chegado, mudando o
+// destino operacional dela para casa sem alterar a rota dos demais alunos.
+app.post('/api/trips/:id/students/:studentId/emergency-return', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const reason = String(req.body?.reason || '').trim().slice(0, 500) || null;
+  const student = await db.query(
+    `SELECT s.id, s.name
+       FROM trips t
+       JOIN route_students rs ON rs.route_id=t.route_id
+       JOIN students s ON s.id=rs.student_id
+      WHERE t.id=$1 AND s.id=$2 AND t.tenant_id=$3 AND t.status='active'
+        AND ($4='admin' OR t.driver_user_id=$5)`,
+    [req.params.id, req.params.studentId, req.auth.tenantId, req.auth.role, req.auth.userId]
+  );
+  if (student.rows.length === 0) return res.status(404).json({ error: 'aluno ou viagem ativa nao encontrado' });
+  const latest = await db.query(
+    `SELECT type FROM trip_events WHERE trip_id=$1 AND student_id=$2 ORDER BY at DESC LIMIT 1`,
+    [req.params.id, req.params.studentId]
+  );
+  if (latest.rows[0]?.type !== 'dropped') {
+    return res.status(409).json({ error: 'o retorno de emergencia so pode iniciar depois da chegada' });
+  }
+  await db.query(
+    `INSERT INTO trip_emergency_returns(trip_id, student_id, tenant_id, reason, active, started_at, finished_at)
+     VALUES($1,$2,$3,$4,true,now(),NULL)
+     ON CONFLICT (trip_id, student_id) DO UPDATE
+       SET reason=EXCLUDED.reason, active=true, started_at=now(), finished_at=NULL`,
+    [req.params.id, req.params.studentId, req.auth.tenantId, reason]
+  );
+  const boarded = await db.query(
+    `INSERT INTO trip_events(tenant_id, trip_id, student_id, type)
+     VALUES($1,$2,$3,'boarded') RETURNING *`,
+    [req.auth.tenantId, req.params.id, req.params.studentId]
+  );
+  hub.broadcast(req.params.id, {
+    type: 'emergency_return', tripId: req.params.id,
+    studentId: req.params.studentId, studentName: student.rows[0].name,
+    reason, createdAt: boarded.rows[0].at,
+  });
+  db.query(
+    `SELECT guardian_user_id FROM student_guardians WHERE student_id=$1`,
+    [req.params.studentId]
+  ).then((parents) => push.sendToUsers(
+    parents.rows.map((p) => p.guardian_user_id),
+    'Retorno de emergência',
+    `${student.rows[0].name} está retornando para casa${reason ? `: ${reason}` : '.'}`,
+    { type: 'emergency_return', tripId: req.params.id, studentId: req.params.studentId }
+  )).catch((e) => console.error('[push] falha no retorno de emergencia', e.message));
+  res.json({ ok: true });
 });
 
 // Alerta automatico calculado pelo app do motorista a partir do GPS e da
@@ -1887,6 +1946,13 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
     [req.auth.tenantId, req.params.id, student_id, type, lat ?? null, lng ?? null,
       type === 'dropped' ? received_by?.trim() || null : null]
   );
+  if (type === 'dropped') {
+    await db.query(
+      `UPDATE trip_emergency_returns SET active=false, finished_at=now()
+        WHERE trip_id=$1 AND student_id=$2 AND tenant_id=$3 AND active=true`,
+      [req.params.id, student_id, req.auth.tenantId]
+    );
+  }
   hub.broadcast(req.params.id, { type: 'event', event: r.rows[0] });
 
   // Notifica os responsaveis do aluno (nao bloqueia a resposta).

@@ -94,6 +94,7 @@ class _LocationTabScreenState extends State<LocationTabScreen> {
       studentNames: _studentNames,
       direction: trip['direction'] as String?,
       routeName: trip['route_name'] as String?,
+      emergencyReturn: trip['emergency_return_active'] == true,
     );
   }
 }
