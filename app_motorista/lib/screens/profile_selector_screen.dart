@@ -47,27 +47,43 @@ class ProfileSelectorScreen extends StatelessWidget {
                         color: Colors.white, size: 42),
                   ),
                   const SizedBox(height: 24),
-                  Text('VaiEscolar',
+                  Text('Verificação de Usuário',
                       style: Theme.of(context)
                           .textTheme
                           .headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
-                  Text('Como você quer acessar?',
-                      style: Theme.of(context).textTheme.bodyLarge),
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Para garantir a melhor experiência, confirme seu perfil:',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 32),
                   _ProfileCard(
                     icon: Icons.directions_bus_rounded,
-                    title: 'Motorista ou transportador',
-                    subtitle: 'Rotas, alunos, GPS, financeiro e gestão',
+                    title: 'Sou Motorista/Transportador',
+                    subtitle: 'Sou motorista de transporte escolar',
                     color: AppColors.primary,
                     onTap: () => _open(context, AppProfile.driver),
                   ),
                   const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text('ou',
+                            style: Theme.of(context).textTheme.bodyMedium),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
                   _ProfileCard(
                     icon: Icons.family_restroom_rounded,
-                    title: 'Aluno ou responsável',
-                    subtitle: 'Acompanhar a van, avisos e mensagens',
+                    title: 'Sou Passageiro/Responsável',
+                    subtitle: 'Quero rastrear o transporte escolar',
                     color: AppColors.accent,
                     onTap: () => _open(context, AppProfile.parent),
                   ),

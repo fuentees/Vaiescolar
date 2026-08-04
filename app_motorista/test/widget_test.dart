@@ -8,10 +8,10 @@ void main() {
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const VaiEscolarApp());
-    expect(find.text('VaiEscolar'), findsOneWidget);
-    expect(find.text('Motorista ou transportador'), findsOneWidget);
-    expect(find.text('Aluno ou responsável'), findsOneWidget);
-    await tester.tap(find.text('Aluno ou responsável'));
+    expect(find.text('Verificação de Usuário'), findsOneWidget);
+    expect(find.text('Sou Motorista/Transportador'), findsOneWidget);
+    expect(find.text('Sou Passageiro/Responsável'), findsOneWidget);
+    await tester.tap(find.text('Sou Passageiro/Responsável'));
     await tester.pumpAndSettle();
     expect(find.text('Acompanhe cada caminho'), findsOneWidget);
     expect(find.text('Vincular com codigo da escola'), findsOneWidget);

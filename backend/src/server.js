@@ -72,14 +72,14 @@ app.get('/health', async (_req, res) => {
 app.get('/app-version/:app', (req, res) => {
   const versions = {
     motorista: {
-      version: '1.0.0', buildNumber: 6,
+      version: '1.0.1', buildNumber: 7,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Aplicativo único para motorista, aluno e responsável.',
+      notes: 'Nova tela de verificação e escolha do perfil de usuário.',
     },
     responsavel: {
-      version: '1.0.0', buildNumber: 6,
+      version: '1.0.1', buildNumber: 7,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Aplicativo único com acesso de motorista ou responsável.',
+      notes: 'Nova tela de verificação e escolha do perfil de usuário.',
     },
   };
   const version = versions[req.params.app];
