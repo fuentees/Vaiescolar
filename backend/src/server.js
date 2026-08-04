@@ -72,14 +72,14 @@ app.get('/health', async (_req, res) => {
 app.get('/app-version/:app', (req, res) => {
   const versions = {
     motorista: {
-      version: '0.3.0', buildNumber: 4,
-      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Motorista.apk',
-      notes: 'Chat reorganizado, horários separados de ida e volta e notificações sonoras.',
+      version: '1.0.0', buildNumber: 6,
+      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
+      notes: 'Aplicativo único para motorista, aluno e responsável.',
     },
     responsavel: {
-      version: '0.3.1', buildNumber: 5,
-      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Responsavel.zip',
-      notes: 'Previsão de chegada em tempo real calculada pelo GPS da van.',
+      version: '1.0.0', buildNumber: 6,
+      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
+      notes: 'Aplicativo único com acesso de motorista ou responsável.',
     },
   };
   const version = versions[req.params.app];
@@ -102,6 +102,7 @@ function sendApk(filename) {
 app.get('/downloads/VaiEscolar-Motorista.apk', sendApk('VaiEscolar-Motorista-arm64.apk'));
 app.get('/downloads/VaiEscolar-Responsavel.apk', sendApk('VaiEscolar-Responsavel-arm64.apk'));
 app.get('/downloads/VaiEscolar-Responsavel.zip', sendApk('VaiEscolar-Responsavel.zip'));
+app.get('/downloads/VaiEscolar.apk', sendApk('VaiEscolar-arm64.apk'));
 
 // Rate limit mais restrito nos endpoints publicos de auth (forca bruta de
 // login/senha, spam de cadastro/convite); geral mais frouxo no resto da API.

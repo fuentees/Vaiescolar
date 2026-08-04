@@ -55,7 +55,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
     _statusText = widget.direction == 'to_home'
         ? 'Voltando para casa'
         : 'A caminho da escola';
-    rootBundle.loadString('assets/map_style.json').then((style) {
+    _loadMapStyle().then((style) {
       if (!mounted) return;
       setState(() => _mapStyle = style);
     });
@@ -70,6 +70,15 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
     _staleTicker = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<String> _loadMapStyle() async {
+    try {
+      return await rootBundle
+          .loadString('packages/app_pais/assets/map_style.json');
+    } catch (_) {
+      return rootBundle.loadString('assets/map_style.json');
+    }
   }
 
   void _connectLive() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/push_service.dart';
 import '../theme.dart';
 import 'app_shell.dart';
 import 'register_tenant_screen.dart';
@@ -26,6 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     setState(() => _loading = false);
     if (ok) {
+      await PushService.init();
+      if (!mounted) return;
       Navigator.of(context)
           .pushReplacement(MaterialPageRoute(builder: (_) => const AppShell()));
     } else {
