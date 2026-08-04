@@ -236,6 +236,9 @@ async function executeTrip(direction, points) {
   assert.deepEqual(events.map((event) => event.type), ['boarded', 'dropped']);
   assert.equal(events[1].received_by, 'Maria Responsavel');
 
+  const activeAfterDrop = await json('GET', '/api/trips/active', undefined, parentToken);
+  assert.equal(activeAfterDrop.some((trip) => trip.student_id === studentId), false);
+
   const finishedPromise = nextSocketMessage(ws, 'trip_finished');
   await json('POST', `/api/trips/${tripId}/finish`, {}, driverToken);
   assert.equal((await finishedPromise).tripId, tripId);

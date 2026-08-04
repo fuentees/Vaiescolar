@@ -361,19 +361,23 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          Text(trip.routeName,
-              style: const TextStyle(color: Colors.white70, fontSize: 13)),
-          const SizedBox(height: 3),
+          if (trip.lastEventType != 'boarded') ...[
+            Text(trip.routeName,
+                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 3),
+          ],
           Text(_updatedLabel(trip.locationAt),
               style: const TextStyle(color: Colors.white, fontSize: 13)),
-          const SizedBox(height: 5),
-          Text(
-            arrival == null
-                ? 'Previsão indisponível até receber um GPS recente'
-                : 'Previsão em tempo real: ${arrival.hour.toString().padLeft(2, '0')}:${arrival.minute.toString().padLeft(2, '0')} (aprox. $etaMinutes min)',
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
-          ),
+          if (trip.lastEventType != 'boarded') ...[
+            const SizedBox(height: 5),
+            Text(
+              arrival == null
+                  ? 'Previsão indisponível até receber um GPS recente'
+                  : 'Previsão em tempo real: ${arrival.hour.toString().padLeft(2, '0')}:${arrival.minute.toString().padLeft(2, '0')} (aprox. $etaMinutes min)',
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

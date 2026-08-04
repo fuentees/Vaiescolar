@@ -459,6 +459,14 @@ class Api {
     return jsonDecode(res.body) as List<dynamic>;
   }
 
+  static Future<bool> clearNotifications() async {
+    final res = await http.delete(
+      Uri.parse('${Config.apiBase}/api/notifications'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    return res.statusCode == 200;
+  }
+
   /// Auditoria administrativa (admin): quem alterou o que. `entityType`
   /// filtra por tipo (`user`/`student`/`route`/`vehicle`/`payment`).
   static Future<List<dynamic>> auditLog(

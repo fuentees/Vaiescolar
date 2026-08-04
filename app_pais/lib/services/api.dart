@@ -246,6 +246,14 @@ class Api {
     return jsonDecode(res.body) as List<dynamic>;
   }
 
+  static Future<bool> clearNotifications() async {
+    final res = await http.delete(
+      Uri.parse('${Config.apiBase}/api/notifications'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    return res.statusCode == 200;
+  }
+
   /// Historico de viagens finalizadas envolvendo um filho especifico.
   static Future<List<dynamic>> tripHistory(String studentId,
       {int limit = 20, int offset = 0}) async {

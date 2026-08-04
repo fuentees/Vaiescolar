@@ -371,7 +371,6 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       String studentId, String name, String type, String? currentStatus) async {
     final activeTripId = _activeTripId;
     if (activeTripId == null) return;
-    String? receivedBy;
     // So confirma no caso de pular etapa (desembarque sem embarque
     // registrado) -- embarque normal na primeira marcacao nao precisa.
     if (type == 'dropped' && currentStatus != 'boarded') {
@@ -394,71 +393,32 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       if (confirmado != true) return;
       if (!mounted) return;
     }
-    if (type == 'dropped') {
-      final controller = TextEditingController();
-      receivedBy = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('Quem recebeu $name?'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Nome da pessoa ou instituição',
-              hintText: 'Ex.: Maria Silva ou Escola Municipal',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (value.length >= 2) Navigator.pop(dialogContext, value);
-              },
-              child: const Text('Confirmar desembarque'),
-            ),
-          ],
-        ),
-      );
-      controller.dispose();
-      if (receivedBy == null) return;
-    }
     setState(() => _busyStudentIds.add(studentId));
     final ok = await Api.registerEvent(
         tripId: activeTripId,
         studentId: studentId,
-        type: type,
-        receivedBy: receivedBy);
+        type: type);
     if (ok) {
       HapticFeedback.mediumImpact();
       SystemSound.play(SystemSoundType.click);
       await _loadStudents();
       await TrackingService.refreshProximityStops();
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(type == 'boarded'
-              ? '$name marcado como embarcado.'
-              : 'Desembarque de $name confirmado.'),
-          action: SnackBarAction(
-            label: 'Desfazer',
-            onPressed: () async {
-              final undone = await Api.undoLastEvent(activeTripId, studentId);
-              if (undone) {
-                await _loadStudents();
-                await TrackingService.refreshProximityStops();
-              }
-            },
-          ),
-        ));
-      }
     }
     if (!mounted) return;
     setState(() => _busyStudentIds.remove(studentId));
+  }
+
+  Future<void> _undo(String studentId) async {
+    final tripId = _activeTripId;
+    if (tripId == null) return;
+    setState(() => _busyStudentIds.add(studentId));
+    final undone = await Api.undoLastEvent(tripId, studentId);
+    if (undone) {
+      HapticFeedback.selectionClick();
+      await _loadStudents();
+      await TrackingService.refreshProximityStops();
+    }
+    if (mounted) setState(() => _busyStudentIds.remove(studentId));
   }
 
   @override
@@ -786,6 +746,15 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                     ),
                                   ),
                                 ]),
+                              if (!busy && status != null)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: () => _undo(id),
+                                    icon: const Icon(Icons.undo, size: 18),
+                                    label: const Text('Corrigir última marcação'),
+                                  ),
+                                ),
                             ],
                           ),
                         ),

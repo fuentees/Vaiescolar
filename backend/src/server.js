@@ -73,14 +73,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.8', buildNumber: 4014, releaseBuild: 14,
+      version: '1.0.9', buildNumber: 4015, releaseBuild: 15,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Corrige o carregamento do Google Maps no aplicativo unificado.',
+      notes: 'Simplifica embarque, encerra acompanhamento ao chegar e permite limpar notificações.',
     },
     responsavel: {
-      version: '1.0.8', buildNumber: 4014, releaseBuild: 14,
+      version: '1.0.9', buildNumber: 4015, releaseBuild: 15,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Corrige o carregamento do Google Maps no aplicativo unificado.',
+      notes: 'Simplifica embarque, encerra acompanhamento ao chegar e permite limpar notificações.',
     },
   };
   const version = versions[req.params.app];
@@ -1392,7 +1392,11 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
                 cm.created_at, cm.id::text AS entity_id
            FROM chat_messages cm
           WHERE cm.tenant_id=$2 AND cm.parent_user_id=$1 AND cm.sender_user_id != $1
-       ) x ORDER BY created_at DESC LIMIT $3`,
+       ) x
+       WHERE x.created_at > COALESCE(
+         (SELECT notifications_cleared_at FROM users WHERE id=$1), '-infinity'::timestamptz
+       )
+       ORDER BY created_at DESC LIMIT $3`,
       [req.auth.userId, req.auth.tenantId, limit]
     );
   } else {
@@ -1411,11 +1415,23 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
            FROM absences ab
            JOIN students s ON s.id = ab.student_id
           WHERE ab.tenant_id=$1
-       ) x ORDER BY created_at DESC LIMIT $2`,
-      [req.auth.tenantId, limit]
+       ) x
+       WHERE x.created_at > COALESCE(
+         (SELECT notifications_cleared_at FROM users WHERE id=$2), '-infinity'::timestamptz
+       )
+       ORDER BY created_at DESC LIMIT $3`,
+      [req.auth.tenantId, req.auth.userId, limit]
     );
   }
   res.json(r.rows);
+});
+
+app.delete('/api/notifications', authMiddleware, async (req, res) => {
+  await db.query(
+    'UPDATE users SET notifications_cleared_at=now() WHERE id=$1 AND tenant_id=$2',
+    [req.auth.userId, req.auth.tenantId]
+  );
+  res.json({ ok: true });
 });
 
 // Auditoria administrativa: quem alterou o que (reset de senha, pagamento,
@@ -1688,6 +1704,7 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
       WHERE t.tenant_id = $1
         AND t.status = 'active'
         AND sg.guardian_user_id = $2
+        AND COALESCE(event.type, '') <> 'dropped'
       ORDER BY t.started_at DESC`,
     [req.auth.tenantId, req.auth.userId]
   );

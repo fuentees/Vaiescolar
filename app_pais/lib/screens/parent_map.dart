@@ -45,6 +45,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
   String? _statusText;
   DateTime? _statusAt;
   bool _tripFinished = false;
+  bool _studentOnBoard = false;
 
   final Set<Marker> _extraMarkers = {};
 
@@ -143,6 +144,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
       }
       if (events.isNotEmpty) {
         final lastEvent = events.last;
+        _studentOnBoard = lastEvent['type'] == 'boarded';
         final eventAt = DateTime.parse(lastEvent['at'] as String).toLocal();
         if (_statusAt == null || eventAt.isAfter(_statusAt!)) {
           final studentName = lastEvent['student_name'] as String;
@@ -216,6 +218,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
   }
 
   void _onNewPosition(LivePosition p) {
+    if (_tripFinished) return;
     final from = _pos;
     final to = LatLng(p.lat, p.lng);
     _tween?.cancel();
@@ -248,11 +251,14 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
   }
 
   void _onEvent(TripEvent e) {
+    if (!widget.studentNames.containsKey(e.studentId)) return;
     final name = widget.studentNames[e.studentId] ?? 'Aluno';
     final action = e.type == 'boarded' ? 'embarcou' : 'chegou / desceu';
     setState(() {
       _statusText = '$name $action';
       _statusAt = DateTime.now();
+      _studentOnBoard = e.type == 'boarded';
+      if (e.type == 'dropped') _tripFinished = true;
     });
   }
 
@@ -365,7 +371,7 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
                       color: AppColors.success,
                       child: Padding(
                         padding: EdgeInsets.all(12),
-                        child: Text('Viagem finalizada',
+                        child: Text('Acompanhamento encerrado — aluno chegou',
                             style: TextStyle(color: Colors.white)),
                       ),
                     ),
@@ -400,12 +406,13 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
                       children: [
                         Text(studentLabel,
                             style: Theme.of(context).textTheme.titleMedium),
-                        Text(
-                          widget.routeName != null
-                              ? '${widget.routeName} · $direcaoLabel'
-                              : direcaoLabel,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        if (!_studentOnBoard)
+                          Text(
+                            widget.routeName != null
+                                ? '${widget.routeName} · $direcaoLabel'
+                                : direcaoLabel,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                         Text(
                           '$_statusText · atualizado ${_timeLabel(_statusAt)}',
                           style: Theme.of(context).textTheme.bodySmall,

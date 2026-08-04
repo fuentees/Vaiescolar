@@ -35,6 +35,7 @@ ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
 -- Versao do token: incrementada ao trocar/resetar senha, invalida na hora
 -- os tokens de 30 dias emitidos antes da troca (sem precisar de blacklist).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_cleared_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS vehicles (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

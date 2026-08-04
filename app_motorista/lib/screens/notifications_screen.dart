@@ -52,10 +52,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     });
   }
 
+  Future<void> _clearAll() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Limpar notificações?'),
+      content: const Text('As notificações atuais serão removidas desta lista.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Limpar')),
+      ],
+    ));
+    if (confirmed != true) return;
+    if (await Api.clearNotifications() && mounted) setState(() => _items = []);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notificacoes')),
+      appBar: AppBar(title: const Text('Notificações'), actions: [
+        if (_items.isNotEmpty) IconButton(onPressed: _clearAll, tooltip: 'Limpar notificações', icon: const Icon(Icons.delete_sweep_outlined)),
+      ]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
