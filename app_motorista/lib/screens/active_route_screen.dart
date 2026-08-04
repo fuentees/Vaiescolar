@@ -219,22 +219,39 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       });
       return;
     }
-    final route = _routes.firstWhere((r) => r['id'] == _routeId, orElse: () => null);
-    final vehicle = _vehicles.firstWhere((v) => v['id'] == _vehicleId, orElse: () => null);
+    final route =
+        _routes.firstWhere((r) => r['id'] == _routeId, orElse: () => null);
+    final vehicle =
+        _vehicles.firstWhere((v) => v['id'] == _vehicleId, orElse: () => null);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Checklist antes da saída'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const ListTile(leading: Icon(Icons.gps_fixed, color: AppColors.success), title: Text('GPS ativado')),
-          const ListTile(leading: Icon(Icons.wifi, color: AppColors.success), title: Text('Internet conectada')),
-          ListTile(leading: const Icon(Icons.route), title: Text(route?['name'] as String? ?? 'Rota selecionada')),
-          ListTile(leading: const Icon(Icons.directions_bus), title: Text(vehicle?['plate'] as String? ?? 'Veículo padrão da rota')),
-          ListTile(leading: const Icon(Icons.groups), title: Text('${linkedStudents.length} alunos na rota')),
+          const ListTile(
+              leading: Icon(Icons.gps_fixed, color: AppColors.success),
+              title: Text('GPS ativado')),
+          const ListTile(
+              leading: Icon(Icons.wifi, color: AppColors.success),
+              title: Text('Internet conectada')),
+          ListTile(
+              leading: const Icon(Icons.route),
+              title: Text(route?['name'] as String? ?? 'Rota selecionada')),
+          ListTile(
+              leading: const Icon(Icons.directions_bus),
+              title: Text(
+                  vehicle?['plate'] as String? ?? 'Veículo padrão da rota')),
+          ListTile(
+              leading: const Icon(Icons.groups),
+              title: Text('${linkedStudents.length} alunos na rota')),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Revisar')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Iniciar rota')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Revisar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Iniciar rota')),
         ],
       ),
     );
@@ -351,7 +368,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       // finalizar com sucesso, permitindo tentar de novo.
       setState(() {
         _busy = false;
-        _error = 'Não foi possível finalizar. Confirme o desembarque de todos os alunos e tente novamente.';
+        _error =
+            'Não foi possível finalizar. Confirme o desembarque de todos os alunos e tente novamente.';
       });
     }
   }
@@ -395,9 +413,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     }
     setState(() => _busyStudentIds.add(studentId));
     final ok = await Api.registerEvent(
-        tripId: activeTripId,
-        studentId: studentId,
-        type: type);
+        tripId: activeTripId, studentId: studentId, type: type);
     if (ok) {
       HapticFeedback.mediumImpact();
       SystemSound.play(SystemSoundType.click);
@@ -438,8 +454,12 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Iniciar retorno')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Iniciar retorno')),
         ],
       ),
     );
@@ -455,6 +475,168 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       await TrackingService.refreshProximityStops();
     }
     if (mounted) setState(() => _busyStudentIds.remove(studentId));
+  }
+
+  Future<void> _reportIncident() async {
+    final tripId = _activeTripId;
+    if (tripId == null) return;
+    String type = 'delay';
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Avisar ocorrência'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              initialValue: type,
+              decoration: const InputDecoration(labelText: 'Tipo'),
+              items: const [
+                DropdownMenuItem(value: 'delay', child: Text('Atraso')),
+                DropdownMenuItem(
+                    value: 'breakdown', child: Text('Pane ou problema na van')),
+                DropdownMenuItem(
+                    value: 'accident', child: Text('Acidente / urgência')),
+                DropdownMenuItem(
+                    value: 'student_missing',
+                    child: Text('Aluno não localizado')),
+                DropdownMenuItem(
+                    value: 'school_closed', child: Text('Escola fechada')),
+                DropdownMenuItem(value: 'other', child: Text('Outro aviso')),
+              ],
+              onChanged: (value) => setDialogState(() => type = value!),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLength: 500,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  labelText: 'O que aconteceu?',
+                  hintText: 'Mensagem enviada aos responsáveis'),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Voltar')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Enviar aviso')),
+          ],
+        ),
+      ),
+    );
+    final description = controller.text.trim();
+    controller.dispose();
+    if (confirmed != true || description.length < 3) return;
+    setState(() => _busy = true);
+    final ok = await Api.reportIncident(tripId, type, description);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+          ok ? 'Responsáveis avisados' : 'Não foi possível enviar o aviso'),
+    ));
+  }
+
+  Future<void> _changeVehicle() async {
+    final tripId = _activeTripId;
+    if (tripId == null || _vehicles.isEmpty) return;
+    String? selected = _vehicleId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Trocar veículo da rota'),
+          content: DropdownButtonFormField<String>(
+            initialValue:
+                _vehicles.any((v) => v['id'] == selected) ? selected : null,
+            decoration: const InputDecoration(labelText: 'Novo veículo'),
+            items: _vehicles
+                .where((v) => v['status'] != 'maintenance')
+                .map<DropdownMenuItem<String>>((v) => DropdownMenuItem(
+                    value: v['id'] as String,
+                    child: Text(
+                        '${v['plate']}${v['model'] == null ? '' : ' - ${v['model']}'}')))
+                .toList(),
+            onChanged: (value) => setDialogState(() => selected = value),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Voltar')),
+            FilledButton(
+                onPressed: selected == null
+                    ? null
+                    : () => Navigator.pop(dialogContext, true),
+                child: const Text('Confirmar troca')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || selected == null) return;
+    final ok = await Api.changeTripVehicle(tripId, selected!);
+    if (!mounted) return;
+    if (ok) setState(() => _vehicleId = selected);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok
+            ? 'Veículo alterado e responsáveis avisados'
+            : 'Não foi possível trocar o veículo')));
+  }
+
+  Future<void> _cancelTrip() async {
+    final tripId = _activeTripId;
+    if (tripId == null) return;
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancelar rota em andamento?'),
+        content: TextField(
+          controller: controller,
+          maxLength: 500,
+          maxLines: 3,
+          decoration: const InputDecoration(
+              labelText: 'Motivo obrigatório',
+              hintText: 'Ex.: van apresentou uma pane'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Voltar')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cancelar rota'),
+          ),
+        ],
+      ),
+    );
+    final reason = controller.text.trim();
+    controller.dispose();
+    if (confirmed != true || reason.length < 3) return;
+    setState(() => _busy = true);
+    final ok = await Api.cancelTrip(tripId, reason);
+    if (!mounted) return;
+    if (ok) {
+      await TrackingService.stopTracking();
+      if (!mounted) return;
+      _stopClock();
+      setState(() {
+        _activeTripId = null;
+        _activeTripStartedAt = null;
+        _students = [];
+        _busy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Rota cancelada e responsáveis avisados')));
+    } else {
+      setState(() {
+        _busy = false;
+        _error = 'Não foi possível cancelar a rota.';
+      });
+    }
   }
 
   @override
@@ -488,6 +670,35 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
         appBar: AppBar(
           title: const Text('Rota do dia'),
           actions: [
+            if (tracking)
+              PopupMenuButton<String>(
+                tooltip: 'Ocorrências e emergência',
+                icon: const Icon(Icons.warning_amber_rounded),
+                onSelected: (value) {
+                  if (value == 'incident') _reportIncident();
+                  if (value == 'vehicle') _changeVehicle();
+                  if (value == 'cancel') _cancelTrip();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                      value: 'incident',
+                      child: ListTile(
+                          leading: Icon(Icons.campaign_outlined),
+                          title: Text('Avisar ocorrência'))),
+                  PopupMenuItem(
+                      value: 'vehicle',
+                      child: ListTile(
+                          leading: Icon(Icons.swap_horiz),
+                          title: Text('Trocar veículo'))),
+                  PopupMenuDivider(),
+                  PopupMenuItem(
+                      value: 'cancel',
+                      child: ListTile(
+                          leading: Icon(Icons.cancel_outlined,
+                              color: AppColors.error),
+                          title: Text('Cancelar rota'))),
+                ],
+              ),
             IconButton(
               icon: const Icon(Icons.person_outline),
               tooltip: 'Minha conta',
@@ -655,7 +866,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                       final id = s['id'] as String;
                       final name = s['name'] as String;
                       final status = s['last_status'] as String?;
-                      final emergencyReturn = s['emergency_return_active'] == true;
+                      final emergencyReturn =
+                          s['emergency_return_active'] == true;
                       final absent = s['absent'] == true;
                       final address = s['home_address'] as String?;
                       final emergencyPhone =
@@ -664,10 +876,10 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                       final statusLabel = emergencyReturn
                           ? 'Retorno de emergência para casa'
                           : status == 'boarded'
-                          ? 'Embarcou'
-                          : status == 'dropped'
-                              ? 'Desceu'
-                              : 'Aguardando';
+                              ? 'Embarcou'
+                              : status == 'dropped'
+                                  ? 'Desceu'
+                                  : 'Aguardando';
 
                       return Card(
                         margin: const EdgeInsets.symmetric(
@@ -720,14 +932,23 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                       emergencyPhone.trim().isNotEmpty)
                                     PopupMenuButton<String>(
                                       tooltip: 'Contatar responsável',
-                                      icon: const Icon(Icons.contact_phone_outlined),
+                                      icon: const Icon(
+                                          Icons.contact_phone_outlined),
                                       onSelected: (value) {
-                                        if (value == 'call') _call(emergencyPhone);
-                                        if (value == 'whatsapp') _openWhatsApp(emergencyPhone);
+                                        if (value == 'call') {
+                                          _call(emergencyPhone);
+                                        }
+                                        if (value == 'whatsapp') {
+                                          _openWhatsApp(emergencyPhone);
+                                        }
                                       },
                                       itemBuilder: (_) => const [
-                                        PopupMenuItem(value: 'call', child: Text('Ligar')),
-                                        PopupMenuItem(value: 'whatsapp', child: Text('Abrir WhatsApp')),
+                                        PopupMenuItem(
+                                            value: 'call',
+                                            child: Text('Ligar')),
+                                        PopupMenuItem(
+                                            value: 'whatsapp',
+                                            child: Text('Abrir WhatsApp')),
                                       ],
                                     ),
                                   if (address != null &&
@@ -767,7 +988,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                 SizedBox(
                                   width: double.infinity,
                                   child: FilledButton.icon(
-                                    onPressed: () => _mark(id, name, 'dropped', status),
+                                    onPressed: () =>
+                                        _mark(id, name, 'dropped', status),
                                     icon: const Icon(Icons.home_rounded),
                                     label: const Text('Chegou em casa'),
                                   ),
@@ -776,8 +998,10 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                 SizedBox(
                                   width: double.infinity,
                                   child: FilledButton.icon(
-                                    style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-                                    onPressed: () => _startEmergencyReturn(id, name),
+                                    style: FilledButton.styleFrom(
+                                        backgroundColor: AppColors.error),
+                                    onPressed: () =>
+                                        _startEmergencyReturn(id, name),
                                     icon: const Icon(Icons.emergency_rounded),
                                     label: const Text('Retorno de emergência'),
                                   ),
@@ -810,7 +1034,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                   child: TextButton.icon(
                                     onPressed: () => _undo(id),
                                     icon: const Icon(Icons.undo, size: 18),
-                                    label: const Text('Corrigir última marcação'),
+                                    label:
+                                        const Text('Corrigir última marcação'),
                                   ),
                                 ),
                             ],

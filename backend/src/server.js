@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.11', buildNumber: 4017, releaseBuild: 17,
+      version: '1.0.12', buildNumber: 4018, releaseBuild: 18,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona retorno de emergência do aluno para casa com acompanhamento e alerta urgente.',
+      notes: 'Adiciona cancelamento de rota, ocorrências, troca emergencial de veículo e faltas por trajeto.',
     },
     responsavel: {
-      version: '1.0.11', buildNumber: 4017, releaseBuild: 17,
+      version: '1.0.12', buildNumber: 4018, releaseBuild: 18,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Adiciona retorno de emergência do aluno para casa com acompanhamento e alerta urgente.',
+      notes: 'Adiciona cancelamento de rota, ocorrências, troca emergencial de veículo e faltas por trajeto.',
     },
   };
   const version = versions[req.params.app];
@@ -1478,16 +1478,18 @@ async function assertOwnsStudentOrAdmin(req, studentId) {
 
 app.post('/api/absences', authMiddleware, async (req, res) => {
   const { student_id, date, notes } = req.body;
+  const direction = ['all', 'to_school', 'to_home'].includes(req.body.direction)
+    ? req.body.direction : 'all';
   if (!student_id || !date) return res.status(400).json({ error: 'student_id e date obrigatorios' });
   if (!(await assertOwnsStudentOrAdmin(req, student_id))) {
     return res.status(403).json({ error: 'sem permissao' });
   }
   const r = await db.query(
-    `INSERT INTO absences(tenant_id, student_id, date, notes, created_by)
-     VALUES($1,$2,$3,$4,$5)
-     ON CONFLICT (student_id, date) DO UPDATE SET notes=EXCLUDED.notes
+    `INSERT INTO absences(tenant_id, student_id, date, direction, notes, created_by)
+     VALUES($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (student_id, date, direction) DO UPDATE SET notes=EXCLUDED.notes
      RETURNING *`,
-    [req.auth.tenantId, student_id, date, notes || null, req.auth.userId]
+    [req.auth.tenantId, student_id, date, direction, notes || null, req.auth.userId]
   );
   res.json(r.rows[0]);
 });
@@ -1507,7 +1509,7 @@ app.delete('/api/absences/:id', authMiddleware, async (req, res) => {
 // Faltas futuras dos proprios filhos do pai logado.
 app.get('/api/absences/mine', authMiddleware, requireRole('parent'), async (req, res) => {
   const r = await db.query(
-    `SELECT ab.id, ab.student_id, ab.date, ab.notes
+    `SELECT ab.id, ab.student_id, ab.date, ab.direction, ab.notes
        FROM absences ab
        JOIN student_guardians sg ON sg.student_id = ab.student_id
       WHERE sg.guardian_user_id=$1 AND sg.tenant_id=$2 AND ab.date >= CURRENT_DATE
@@ -1521,7 +1523,7 @@ app.get('/api/absences/mine', authMiddleware, requireRole('parent'), async (req,
 app.get('/api/absences', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : new Date().toISOString().slice(0, 10);
   const r = await db.query(
-    `SELECT ab.id, ab.student_id, s.name AS student_name, ab.notes
+    `SELECT ab.id, ab.student_id, s.name AS student_name, ab.direction, ab.notes
        FROM absences ab
        JOIN students s ON s.id = ab.student_id
       WHERE ab.tenant_id=$1 AND ab.date=$2
@@ -1631,6 +1633,7 @@ app.post('/api/trips/:id/finish', authMiddleware, requireRole('driver', 'admin')
        JOIN students s ON s.id=rs.student_id
        LEFT JOIN absences ab ON ab.student_id=s.id
         AND ab.date=(t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
+        AND ab.direction IN ('all', t.direction)
       WHERE t.id=$1 AND t.tenant_id=$2 AND t.status='active'
         AND ($3='admin' OR t.driver_user_id=$4)
         AND ab.id IS NULL
@@ -1662,6 +1665,85 @@ app.post('/api/trips/:id/finish', authMiddleware, requireRole('driver', 'admin')
   // tela do pai fica mostrando a ultima posicao como se ainda fosse atual.
   hub.broadcast(req.params.id, { type: 'trip_finished', tripId: req.params.id });
   res.json({ ok: true });
+});
+
+async function tripGuardianIds(tripId, tenantId) {
+  const guardians = await db.query(
+    `SELECT DISTINCT sg.guardian_user_id
+       FROM trips t
+       JOIN route_students rs ON rs.route_id=t.route_id
+       JOIN student_guardians sg ON sg.student_id=rs.student_id
+      WHERE t.id=$1 AND t.tenant_id=$2`,
+    [tripId, tenantId]
+  );
+  return guardians.rows.map((row) => row.guardian_user_id);
+}
+
+app.post('/api/trips/:id/cancel', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const reason = String(req.body?.reason || '').trim().slice(0, 500);
+  if (reason.length < 3) return res.status(400).json({ error: 'informe o motivo do cancelamento' });
+  const r = await db.query(
+    `UPDATE trips SET status='cancelled', cancelled_at=now(), finished_at=now(), cancellation_reason=$5
+      WHERE id=$1 AND tenant_id=$2 AND status='active' AND ($3='admin' OR driver_user_id=$4)
+      RETURNING id`,
+    [req.params.id, req.auth.tenantId, req.auth.role, req.auth.userId, reason]
+  );
+  if (r.rows.length === 0) return res.status(404).json({ error: 'viagem ativa nao encontrada' });
+  const ids = await tripGuardianIds(req.params.id, req.auth.tenantId);
+  hub.broadcast(req.params.id, { type: 'trip_cancelled', tripId: req.params.id, reason });
+  push.sendToUsers(ids, 'Rota cancelada', reason, { type: 'trip_cancelled', tripId: req.params.id })
+    .catch((e) => console.error('[push] falha ao notificar cancelamento', e.message));
+  await logAudit(req, 'cancel', 'trip', req.params.id, { reason });
+  res.json({ ok: true });
+});
+
+app.post('/api/trips/:id/incidents', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const allowed = ['delay', 'breakdown', 'accident', 'student_missing', 'school_closed', 'other'];
+  const type = String(req.body?.type || 'other');
+  const description = String(req.body?.description || '').trim().slice(0, 500);
+  if (!allowed.includes(type)) return res.status(400).json({ error: 'tipo de ocorrencia invalido' });
+  if (description.length < 3) return res.status(400).json({ error: 'descreva a ocorrencia' });
+  const trip = await db.query(
+    `SELECT id FROM trips WHERE id=$1 AND tenant_id=$2 AND status='active'
+      AND ($3='admin' OR driver_user_id=$4)`,
+    [req.params.id, req.auth.tenantId, req.auth.role, req.auth.userId]
+  );
+  if (trip.rows.length === 0) return res.status(404).json({ error: 'viagem ativa nao encontrada' });
+  const inserted = await db.query(
+    `INSERT INTO trip_incidents(tenant_id, trip_id, type, description, created_by)
+     VALUES($1,$2,$3,$4,$5) RETURNING id, created_at`,
+    [req.auth.tenantId, req.params.id, type, description, req.auth.userId]
+  );
+  const titles = { delay: 'Atraso na rota', breakdown: 'Van com problema', accident: 'Ocorrencia urgente', student_missing: 'Aluno nao localizado', school_closed: 'Escola fechada', other: 'Aviso sobre a rota' };
+  const ids = await tripGuardianIds(req.params.id, req.auth.tenantId);
+  const payload = { type: 'trip_incident', incidentType: type, description, tripId: req.params.id };
+  hub.broadcast(req.params.id, payload);
+  push.sendToUsers(ids, titles[type], description, payload)
+    .catch((e) => console.error('[push] falha ao notificar ocorrencia', e.message));
+  await logAudit(req, 'create', 'trip_incident', inserted.rows[0].id, { tripId: req.params.id, type });
+  res.json({ id: inserted.rows[0].id, created_at: inserted.rows[0].created_at });
+});
+
+app.put('/api/trips/:id/vehicle', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const vehicleId = String(req.body?.vehicle_id || '');
+  const vehicle = await db.query(
+    'SELECT id, plate, model FROM vehicles WHERE id=$1 AND tenant_id=$2 AND status=$3',
+    [vehicleId, req.auth.tenantId, 'available']
+  );
+  if (vehicle.rows.length === 0) return res.status(404).json({ error: 'veiculo disponivel nao encontrado' });
+  const changed = await db.query(
+    `UPDATE trips SET vehicle_id=$5 WHERE id=$1 AND tenant_id=$2 AND status='active'
+      AND ($3='admin' OR driver_user_id=$4) RETURNING id`,
+    [req.params.id, req.auth.tenantId, req.auth.role, req.auth.userId, vehicleId]
+  );
+  if (changed.rows.length === 0) return res.status(404).json({ error: 'viagem ativa nao encontrada' });
+  const ids = await tripGuardianIds(req.params.id, req.auth.tenantId);
+  const label = `${vehicle.rows[0].plate}${vehicle.rows[0].model ? ` - ${vehicle.rows[0].model}` : ''}`;
+  push.sendToUsers(ids, 'Troca de veiculo', `A rota continuara no veiculo ${label}.`,
+    { type: 'vehicle_changed', tripId: req.params.id })
+    .catch((e) => console.error('[push] falha ao notificar troca de veiculo', e.message));
+  await logAudit(req, 'update', 'trip_vehicle', req.params.id, { vehicleId, label });
+  res.json({ ok: true, vehicle: vehicle.rows[0] });
 });
 
 // A propria viagem ativa do motorista logado (ou do admin, se foi ele quem
@@ -1742,6 +1824,7 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
        JOIN students s ON s.id = rs.student_id
        LEFT JOIN absences ab ON ab.student_id = s.id
         AND ab.date = (t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
+        AND ab.direction IN ('all', t.direction)
        LEFT JOIN trip_emergency_returns er
          ON er.trip_id=t.id AND er.student_id=s.id
       WHERE t.id = $1 AND t.tenant_id = $2

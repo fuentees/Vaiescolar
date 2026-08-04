@@ -44,7 +44,8 @@ class Api {
       return null;
     }
     try {
-      return jsonDecode(res.body)['error'] as String? ?? 'Não foi possível excluir a conta.';
+      return jsonDecode(res.body)['error'] as String? ??
+          'Não foi possível excluir a conta.';
     } catch (_) {
       return 'Não foi possível excluir a conta.';
     }
@@ -154,6 +155,43 @@ class Api {
     return res.statusCode == 200;
   }
 
+  static Future<bool> cancelTrip(String tripId, String reason) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/trips/$tripId/cancel'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+    return res.statusCode == 200;
+  }
+
+  static Future<bool> reportIncident(
+      String tripId, String type, String description) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/trips/$tripId/incidents'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({'type': type, 'description': description}),
+    );
+    return res.statusCode == 200;
+  }
+
+  static Future<bool> changeTripVehicle(String tripId, String vehicleId) async {
+    final res = await http.put(
+      Uri.parse('${Config.apiBase}/api/trips/$tripId/vehicle'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({'vehicle_id': vehicleId}),
+    );
+    return res.statusCode == 200;
+  }
+
   /// A propria viagem ativa (se houver) -- usado no boot do app pra restaurar
   /// o estado "rota em andamento" depois de o processo ter sido morto.
   static Future<Map<String, dynamic>?> myActiveTrip() async {
@@ -202,7 +240,8 @@ class Api {
 
   static Future<bool> undoLastEvent(String tripId, String studentId) async {
     final res = await http.delete(
-      Uri.parse('${Config.apiBase}/api/trips/$tripId/students/$studentId/last-event'),
+      Uri.parse(
+          '${Config.apiBase}/api/trips/$tripId/students/$studentId/last-event'),
       headers: {'authorization': 'Bearer $_token'},
     );
     return res.statusCode == 200;
@@ -211,7 +250,8 @@ class Api {
   static Future<bool> startEmergencyReturn(
       String tripId, String studentId, String? reason) async {
     final res = await http.post(
-      Uri.parse('${Config.apiBase}/api/trips/$tripId/students/$studentId/emergency-return'),
+      Uri.parse(
+          '${Config.apiBase}/api/trips/$tripId/students/$studentId/emergency-return'),
       headers: {
         'authorization': 'Bearer $_token',
         'content-type': 'application/json',

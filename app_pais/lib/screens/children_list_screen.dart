@@ -254,9 +254,42 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
       helpText: 'Aluno não vai neste dia',
     );
     if (chosen == null) return;
+    if (!mounted) return;
+    final direction = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Em qual trajeto?'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, 'all'),
+            child: const ListTile(
+                leading: Icon(Icons.event_busy),
+                title: Text('Dia todo'),
+                subtitle: Text('Não fará ida nem volta')),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, 'to_school'),
+            child: const ListTile(
+                leading: Icon(Icons.school_outlined),
+                title: Text('Somente ida'),
+                subtitle: Text('Não irá para a escola com a van')),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, 'to_home'),
+            child: const ListTile(
+                leading: Icon(Icons.home_outlined),
+                title: Text('Somente volta'),
+                subtitle: Text('Não voltará para casa com a van')),
+          ),
+        ],
+      ),
+    );
+    if (direction == null) return;
     final date =
         '${chosen.year}-${chosen.month.toString().padLeft(2, '0')}-${chosen.day.toString().padLeft(2, '0')}';
-    if (await Api.markAbsence(studentId, date)) await _load();
+    if (await Api.markAbsence(studentId, date, direction: direction)) {
+      await _load();
+    }
   }
 
   Future<void> _cancelAbsence(String absenceId) async {
@@ -387,7 +420,9 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                   ? 'Previsão indisponível até receber um GPS recente'
                   : 'Previsão em tempo real: ${arrival.hour.toString().padLeft(2, '0')}:${arrival.minute.toString().padLeft(2, '0')} (aprox. $etaMinutes min)',
               style: const TextStyle(
-                  color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700),
             ),
           ],
           const SizedBox(height: 16),
@@ -503,6 +538,11 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                     color: AppColors.error),
                 title: Text(
                     'Falta agendada para ${_formatDate(absence['date'] as String)}'),
+                subtitle: Text(switch (absence['direction']) {
+                  'to_school' => 'Somente ida para a escola',
+                  'to_home' => 'Somente volta para casa',
+                  _ => 'Dia todo',
+                }),
                 trailing: TextButton(
                   onPressed: () => _cancelAbsence(absence['id'] as String),
                   child: const Text('Cancelar'),

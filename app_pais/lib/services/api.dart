@@ -59,7 +59,8 @@ class Api {
       return null;
     }
     try {
-      return jsonDecode(res.body)['error'] as String? ?? 'Não foi possível excluir a conta.';
+      return jsonDecode(res.body)['error'] as String? ??
+          'Não foi possível excluir a conta.';
     } catch (_) {
       return 'Não foi possível excluir a conta.';
     }
@@ -308,14 +309,19 @@ class Api {
 
   /// Avisa que o aluno nao vai numa data especifica ("YYYY-MM-DD").
   static Future<bool> markAbsence(String studentId, String date,
-      {String? notes}) async {
+      {String? notes, String direction = 'all'}) async {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/absences'),
       headers: {
         'authorization': 'Bearer $_token',
         'content-type': 'application/json'
       },
-      body: jsonEncode({'student_id': studentId, 'date': date, 'notes': notes}),
+      body: jsonEncode({
+        'student_id': studentId,
+        'date': date,
+        'notes': notes,
+        'direction': direction
+      }),
     );
     return res.statusCode == 200;
   }

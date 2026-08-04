@@ -77,7 +77,8 @@ class LiveLocation {
           'emergency_return',
           DateTime.parse(msg['createdAt'] as String).toLocal(),
         ));
-      } else if (msg['type'] == 'trip_finished') {
+      } else if (msg['type'] == 'trip_finished' ||
+          msg['type'] == 'trip_cancelled') {
         _finishedController.add(null);
       }
     }, onError: (_) {

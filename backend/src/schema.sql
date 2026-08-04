@@ -167,6 +167,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_one_active_per_driver
 -- Veiculo realmente usado nessa viagem -- por padrao o da rota, mas pode ser
 -- trocado na hora de iniciar (motorista usando outra van naquele dia).
 ALTER TABLE trips ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+ALTER TABLE trips DROP CONSTRAINT IF EXISTS trips_status_check;
+ALTER TABLE trips ADD CONSTRAINT trips_status_check CHECK (status IN ('active','finished','cancelled'));
+
+-- Ocorrencias operacionais (atraso, pane, acidente etc.) comunicadas aos
+-- responsaveis enquanto a viagem esta ativa.
+CREATE TABLE IF NOT EXISTS trip_incidents (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  trip_id     UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL CHECK (type IN ('delay','breakdown','accident','student_missing','school_closed','other')),
+  description TEXT,
+  created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_trip_incidents_trip ON trip_incidents(trip_id, created_at DESC);
 
 -- Historico completo de posicoes (breadcrumb / auditoria).
 CREATE TABLE IF NOT EXISTS locations (
@@ -278,6 +296,12 @@ CREATE TABLE IF NOT EXISTS absences (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (student_id, date)
 );
+ALTER TABLE absences ADD COLUMN IF NOT EXISTS direction TEXT NOT NULL DEFAULT 'all';
+ALTER TABLE absences DROP CONSTRAINT IF EXISTS absences_direction_check;
+ALTER TABLE absences ADD CONSTRAINT absences_direction_check CHECK (direction IN ('all','to_school','to_home'));
+ALTER TABLE absences DROP CONSTRAINT IF EXISTS absences_student_id_date_key;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_absences_student_date_direction
+  ON absences(student_id, date, direction);
 CREATE INDEX IF NOT EXISTS idx_absences_tenant ON absences(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_absences_date ON absences(tenant_id, date);
 
