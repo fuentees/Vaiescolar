@@ -45,6 +45,26 @@ class Api {
     await prefs.remove('userId');
   }
 
+  static Future<String?> deleteAccount(String password) async {
+    final res = await http.delete(
+      Uri.parse('${Config.apiBase}/api/auth/account'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json',
+      },
+      body: jsonEncode({'password': password}),
+    );
+    if (res.statusCode == 200) {
+      await logout();
+      return null;
+    }
+    try {
+      return jsonDecode(res.body)['error'] as String? ?? 'Não foi possível excluir a conta.';
+    } catch (_) {
+      return 'Não foi possível excluir a conta.';
+    }
+  }
+
   static Future<bool> login(String email, String password) async {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/auth/login'),

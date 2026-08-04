@@ -324,6 +324,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
 
   Future<void> _mark(
       String studentId, String name, String type, String? currentStatus) async {
+    String? receivedBy;
     // So confirma no caso de pular etapa (desembarque sem embarque
     // registrado) -- embarque normal na primeira marcacao nao precisa.
     if (type == 'dropped' && currentStatus != 'boarded') {
@@ -344,10 +345,47 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
         ),
       );
       if (confirmado != true) return;
+      if (!mounted) return;
+    }
+    if (type == 'dropped') {
+      final controller = TextEditingController();
+      receivedBy = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('Quem recebeu $name?'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Nome da pessoa ou instituição',
+              hintText: 'Ex.: Maria Silva ou Escola Municipal',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.length >= 2) Navigator.pop(dialogContext, value);
+              },
+              child: const Text('Confirmar desembarque'),
+            ),
+          ],
+        ),
+      );
+      controller.dispose();
+      if (receivedBy == null) return;
     }
     setState(() => _busyStudentIds.add(studentId));
     final ok = await Api.registerEvent(
-        tripId: _activeTripId!, studentId: studentId, type: type);
+        tripId: _activeTripId!,
+        studentId: studentId,
+        type: type,
+        receivedBy: receivedBy);
     if (ok) {
       await _loadStudents();
       await TrackingService.refreshProximityStops();

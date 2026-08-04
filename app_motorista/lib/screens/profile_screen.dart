@@ -126,6 +126,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await HostActions.switchProfile?.call();
   }
 
+  Future<void> _deleteAccount() async {
+    final password = TextEditingController();
+    String? error;
+    final deleted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Excluir minha conta?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('A conta será desativada e os dados pessoais serão removidos. O histórico das viagens será preservado.'),
+              const SizedBox(height: 12),
+              TextField(controller: password, obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirme sua senha')),
+              if (error != null) Text(error!, style: const TextStyle(color: AppColors.error)),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () async {
+                final result = await Api.deleteAccount(password.text);
+                if (result != null) {
+                  setDialogState(() => error = result);
+                } else if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('Excluir definitivamente'),
+            ),
+          ],
+        ),
+      ),
+    );
+    password.dispose();
+    if (deleted == true && mounted) await HostActions.switchProfile?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -223,6 +263,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       foregroundColor: AppColors.error),
                   icon: const Icon(Icons.logout),
                   label: const Text('Sair da conta'),
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: _deleteAccount,
+                  style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                  icon: const Icon(Icons.delete_forever_outlined),
+                  label: const Text('Excluir minha conta'),
                 ),
               ],
             ),

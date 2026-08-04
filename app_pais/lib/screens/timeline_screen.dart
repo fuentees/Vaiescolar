@@ -63,6 +63,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                         final label = type == 'boarded'
                             ? '$studentName embarcou'
                             : '$studentName chegou / desceu';
+                        final receivedBy = e['received_by'] as String?;
 
                         return IntrinsicHeight(
                           child: Row(
@@ -108,6 +109,8 @@ class _TimelineScreenState extends State<TimelineScreen> {
                                           style: Theme.of(context)
                                               .textTheme
                                               .titleMedium),
+                                      if (receivedBy?.isNotEmpty == true)
+                                        Text('Recebido por: $receivedBy'),
                                     ],
                                   ),
                                 ),

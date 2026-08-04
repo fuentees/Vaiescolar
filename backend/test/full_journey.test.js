@@ -221,11 +221,13 @@ async function executeTrip(direction, points) {
   }, driverToken);
   await json('POST', `/api/trips/${tripId}/events`, {
     student_id: studentId, type: 'dropped', lat: points.last[0], lng: points.last[1],
+    received_by: 'Maria Responsavel',
   }, driverToken);
   assert.equal((await droppedPromise).event.type, 'dropped');
 
   const events = await json('GET', `/api/trips/${tripId}/events`, undefined, parentToken);
   assert.deepEqual(events.map((event) => event.type), ['boarded', 'dropped']);
+  assert.equal(events[1].received_by, 'Maria Responsavel');
 
   const finishedPromise = nextSocketMessage(ws, 'trip_finished');
   await json('POST', `/api/trips/${tripId}/finish`, {}, driverToken);

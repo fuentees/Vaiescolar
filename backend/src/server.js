@@ -73,14 +73,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.4', buildNumber: 4010, releaseBuild: 10,
+      version: '1.0.5', buildNumber: 4011, releaseBuild: 11,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'GPS mais seguro, troca de perfil e proteção ao finalizar a rota.',
+      notes: 'Registra quem recebeu o aluno, permite excluir a conta e corrige confirmação de senha.',
     },
     responsavel: {
-      version: '1.0.4', buildNumber: 4010, releaseBuild: 10,
+      version: '1.0.5', buildNumber: 4011, releaseBuild: 11,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'GPS mais seguro, troca de perfil e proteção ao finalizar a rota.',
+      notes: 'Registra quem recebeu o aluno, permite excluir a conta e corrige confirmação de senha.',
     },
   };
   const version = versions[req.params.app];
@@ -246,7 +246,9 @@ app.put('/api/auth/password', authMiddleware, async (req, res) => {
   ]);
   if (r.rows.length === 0) return res.status(404).json({ error: 'usuario nao encontrado' });
   const ok = await bcrypt.compare(currentPassword, r.rows[0].password_hash);
-  if (!ok) return res.status(401).json({ error: 'senha atual incorreta' });
+  // 400: a sessão continua válida; 401 faria o cliente interpretar como JWT
+  // expirado e desconectar o usuário por apenas digitar a senha errada.
+  if (!ok) return res.status(400).json({ error: 'senha atual incorreta' });
   const hash = await bcrypt.hash(newPassword, 10);
   // Incrementa token_version pra invalidar tokens de 30 dias emitidos antes
   // da troca; devolve um token novo ja com a versao certa, senao o proprio
@@ -261,6 +263,50 @@ app.put('/api/auth/password', authMiddleware, async (req, res) => {
     tokenVersion: updated.rows[0].token_version,
   });
   res.json({ ok: true, token });
+});
+
+// Exclusão da própria conta com confirmação de senha. Contas de motorista
+// são anonimizadas para preservar o histórico obrigatório das viagens; a
+// conta deixa de autenticar imediatamente. O administrador principal não é
+// removido sem transferência de titularidade do tenant.
+app.delete('/api/auth/account', authMiddleware, async (req, res) => {
+  const { password } = req.body || {};
+  if (!password) return res.status(400).json({ error: 'confirme sua senha' });
+  const found = await db.query(
+    'SELECT role, password_hash FROM users WHERE id=$1 AND tenant_id=$2',
+    [req.auth.userId, req.auth.tenantId]
+  );
+  if (found.rows.length === 0) return res.status(404).json({ error: 'usuario nao encontrado' });
+  if (!(await bcrypt.compare(password, found.rows[0].password_hash))) {
+    return res.status(400).json({ error: 'senha incorreta' });
+  }
+  if (found.rows[0].role === 'admin') {
+    return res.status(409).json({
+      error: 'transfira a administração antes de excluir a conta principal'
+    });
+  }
+  if (found.rows[0].role === 'driver') {
+    const active = await db.query(
+      `SELECT 1 FROM trips WHERE driver_user_id=$1 AND status='active' LIMIT 1`,
+      [req.auth.userId]
+    );
+    if (active.rows.length > 0) {
+      return res.status(409).json({ error: 'finalize a rota ativa antes de excluir a conta' });
+    }
+    await db.query(
+      `UPDATE users
+          SET name='Conta removida', email=$1, phone=NULL, fcm_token=NULL,
+              password_hash=$2, active=false, token_version=token_version+1
+        WHERE id=$3 AND tenant_id=$4`,
+      [`removed-${req.auth.userId}@invalid.local`, await bcrypt.hash(crypto.randomUUID(), 10),
+        req.auth.userId, req.auth.tenantId]
+    );
+  } else {
+    await db.query('DELETE FROM users WHERE id=$1 AND tenant_id=$2', [
+      req.auth.userId, req.auth.tenantId,
+    ]);
+  }
+  res.json({ ok: true });
 });
 
 // Admin reseta a senha de outro usuario do tenant, incluindo outro admin
@@ -1777,7 +1823,7 @@ app.get('/api/trips/:id/location', authMiddleware, requireRole('parent'), async 
 
 // Registra embarque/desembarque de um aluno.
 app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin'), validateBody(tripEventBody), async (req, res) => {
-  const { student_id, type, lat, lng } = req.body;
+  const { student_id, type, lat, lng, received_by } = req.body;
   // Confirma que a viagem existe, e do tenant, esta ativa, que quem chama e
   // o motorista dela (ou admin), e que o aluno realmente esta na rota dessa
   // viagem -- sem isso, qualquer motorista do tenant podia fabricar eventos
@@ -1811,9 +1857,10 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
   }
 
   const r = await db.query(
-    `INSERT INTO trip_events(tenant_id, trip_id, student_id, type, lat, lng)
-     VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [req.auth.tenantId, req.params.id, student_id, type, lat ?? null, lng ?? null]
+    `INSERT INTO trip_events(tenant_id, trip_id, student_id, type, lat, lng, received_by)
+     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [req.auth.tenantId, req.params.id, student_id, type, lat ?? null, lng ?? null,
+      type === 'dropped' ? received_by?.trim() || null : null]
   );
   hub.broadcast(req.params.id, { type: 'event', event: r.rows[0] });
 
@@ -1832,10 +1879,13 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
       const hh = String(when.getHours()).padStart(2, '0');
       const mm = String(when.getMinutes()).padStart(2, '0');
       const action = type === 'boarded' ? 'embarcou na van' : 'chegou / desceu';
+      const receiver = type === 'dropped' && received_by
+        ? `, recebido por ${received_by.trim()}`
+        : '';
       return push.sendToUsers(
         info.rows.map((row) => row.guardian_user_id),
         'VaiEscolar',
-        `${studentName} ${action} as ${hh}:${mm}`,
+        `${studentName} ${action} as ${hh}:${mm}${receiver}`,
         { type: 'trip_event', tripId: req.params.id, eventType: type, studentId: student_id }
       );
     })
@@ -1850,7 +1900,7 @@ app.get('/api/trips/:id/events', authMiddleware, requireRole('parent'), async (r
   const allowed = await parentCanWatch(req.auth.tenantId, req.auth.userId, req.params.id);
   if (!allowed) return res.status(403).json({ error: 'sem permissao' });
   const r = await db.query(
-    `SELECT te.id, te.type, te.at, s.name AS student_name
+    `SELECT te.id, te.type, te.at, te.received_by, s.name AS student_name
        FROM trip_events te
        JOIN students s ON s.id = te.student_id
       WHERE te.trip_id = $1 AND te.tenant_id = $2

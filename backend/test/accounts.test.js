@@ -97,3 +97,27 @@ test('admin nao consegue desativar a propria conta', async () => {
   const res = await put(`/api/users/${meRes.id}/active`, { active: false }, adminToken);
   assert.equal(res.status, 400);
 });
+
+test('responsavel exclui a propria conta somente apos confirmar a senha', async () => {
+  const email = `parent-delete-${suffix}@test.local`;
+  await post('/api/users', {
+    role: 'parent', name: 'Responsavel Delete', email, password: 'senha123'
+  }, adminToken);
+  const login = await post('/api/auth/login', { email, password: 'senha123' }).then((r) => r.json());
+
+  const wrong = await fetch(`${baseUrl}/api/auth/account`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${login.token}` },
+    body: JSON.stringify({ password: 'errada' }),
+  });
+  assert.equal(wrong.status, 400);
+
+  const removed = await fetch(`${baseUrl}/api/auth/account`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${login.token}` },
+    body: JSON.stringify({ password: 'senha123' }),
+  });
+  assert.equal(removed.status, 200);
+  const loginAgain = await post('/api/auth/login', { email, password: 'senha123' });
+  assert.equal(loginAgain.status, 401);
+});

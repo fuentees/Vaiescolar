@@ -30,6 +30,26 @@ class Api {
     await prefs.remove('role');
   }
 
+  static Future<String?> deleteAccount(String password) async {
+    final res = await http.delete(
+      Uri.parse('${Config.apiBase}/api/auth/account'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json',
+      },
+      body: jsonEncode({'password': password}),
+    );
+    if (res.statusCode == 200) {
+      await logout();
+      return null;
+    }
+    try {
+      return jsonDecode(res.body)['error'] as String? ?? 'Não foi possível excluir a conta.';
+    } catch (_) {
+      return 'Não foi possível excluir a conta.';
+    }
+  }
+
   static String? get token => _token;
   static String? get userId => _userId;
   static String? get role => _role;
@@ -161,6 +181,7 @@ class Api {
     required String type, // 'boarded' ou 'dropped'
     double? lat,
     double? lng,
+    String? receivedBy,
   }) async {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/trips/$tripId/events'),
@@ -168,8 +189,13 @@ class Api {
         'authorization': 'Bearer $_token',
         'content-type': 'application/json'
       },
-      body: jsonEncode(
-          {'student_id': studentId, 'type': type, 'lat': lat, 'lng': lng}),
+      body: jsonEncode({
+        'student_id': studentId,
+        'type': type,
+        'lat': lat,
+        'lng': lng,
+        'received_by': receivedBy,
+      }),
     );
     return res.statusCode == 200;
   }

@@ -24,6 +24,7 @@ const tripEventBody = z.object({
   type: z.enum(['boarded', 'dropped']),
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
+  received_by: z.string().trim().min(2).max(200).nullable().optional(),
 });
 
 const paymentUpdateBody = z.object({

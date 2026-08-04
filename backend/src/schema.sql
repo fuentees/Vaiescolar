@@ -204,6 +204,9 @@ CREATE TABLE IF NOT EXISTS trip_events (
   at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_events_trip ON trip_events(trip_id, at);
+-- Pessoa ou instituição que recebeu o aluno no desembarque. Mantém a
+-- rastreabilidade sem alterar eventos antigos, que ficam com valor nulo.
+ALTER TABLE trip_events ADD COLUMN IF NOT EXISTS received_by TEXT;
 
 -- Alertas operacionais enviados pelo motorista antes de chegar a uma parada.
 -- A chave unica impede toque duplo de disparar duas notificacoes iguais.
