@@ -1,7 +1,7 @@
 name: app_motorista
 description: App do motorista - rastreamento em 1o plano de alta precisao (stack 100% gratuita).
 publish_to: "none"
-version: 1.0.5+11
+version: 1.0.6+12
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -10,6 +10,8 @@ dependencies:
   app_pais:
     path: ../app_pais
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   http: ^1.2.0
   shared_preferences: ^2.2.0
@@ -29,6 +31,7 @@ dependencies:
   connectivity_plus: ^6.1.0
   mask_text_input_formatter: ^2.9.0
   flutter_local_notifications: ^22.2.0
+  flutter_secure_storage: ^9.2.4
 
 dev_dependencies:
   flutter_test:

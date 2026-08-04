@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/push_service.dart';
+import '../services/remembered_login.dart';
 import '../theme.dart';
 import 'app_shell.dart';
 import 'register_tenant_screen.dart';
@@ -17,7 +18,24 @@ class _LoginScreenState extends State<LoginScreen> {
   final _pass = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
+  bool _remember = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedLogin();
+  }
+
+  Future<void> _loadRememberedLogin() async {
+    final saved = await RememberedLogin.load();
+    if (!mounted || saved == null) return;
+    setState(() {
+      _email.text = saved.email;
+      _pass.text = saved.password;
+      _remember = true;
+    });
+  }
 
   Future<void> _submit() async {
     setState(() {
@@ -28,6 +46,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     setState(() => _loading = false);
     if (ok) {
+      if (_remember) {
+        await RememberedLogin.save(_email.text.trim(), _pass.text);
+      } else {
+        await RememberedLogin.clear();
+      }
+      if (!mounted) return;
       Navigator.of(context)
           .pushReplacement(MaterialPageRoute(builder: (_) => const AppShell()));
       unawaited(_initPush());
@@ -114,6 +138,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? Icons.visibility_outlined
                         : Icons.visibility_off_outlined),
                   )),
+            ),
+            CheckboxListTile(
+              value: _remember,
+              onChanged: (value) => setState(() => _remember = value ?? false),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('Lembrar e-mail e senha'),
+              subtitle: const Text('Protegidos pelo armazenamento seguro do celular'),
             ),
             if (_error != null)
               Padding(
