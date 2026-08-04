@@ -32,7 +32,6 @@ class PushService {
 
   static Future<void> init() async {
     if (_initialized) return;
-    _initialized = true;
 
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
@@ -86,5 +85,6 @@ class PushService {
     // App estava fechado e foi aberto por um toque na notificacao.
     final initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) onTap?.call(initialMessage.data);
+    _initialized = true;
   }
 }

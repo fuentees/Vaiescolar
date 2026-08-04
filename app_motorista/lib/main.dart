@@ -44,7 +44,10 @@ Future<void> main() async {
     }
   }
 
-  Future<void> handleUnauthorized() async {
+  Future<void> handleUnauthorized(AppProfile source) async {
+    // O APK contem dois clientes internos. Uma resposta atrasada do modulo
+    // inativo nunca pode apagar a sessao nova do perfil escolhido.
+    if (await ProfileMode.load() != source) return;
     await Future.wait([
       driver_api.Api.logout(),
       parent_api.Api.logout(),
@@ -56,8 +59,10 @@ Future<void> main() async {
     );
   }
 
-  driver_http.ApiHttp.onUnauthorized = handleUnauthorized;
-  parent_http.ApiHttp.onUnauthorized = handleUnauthorized;
+  driver_http.ApiHttp.onUnauthorized =
+      () => handleUnauthorized(AppProfile.driver);
+  parent_http.ApiHttp.onUnauthorized =
+      () => handleUnauthorized(AppProfile.parent);
   _initPushInBackground(_initialProfile);
   runApp(const VaiEscolarApp());
 }

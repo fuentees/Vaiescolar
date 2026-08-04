@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/push_service.dart';
@@ -27,13 +28,20 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     setState(() => _loading = false);
     if (ok) {
-      await PushService.init();
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const AppShell()));
-      }
+      Navigator.of(context)
+          .pushReplacement(MaterialPageRoute(builder: (_) => const AppShell()));
+      unawaited(_initPush());
     } else {
       setState(() => _error = 'E-mail ou senha incorretos.');
+    }
+  }
+
+  Future<void> _initPush() async {
+    try {
+      await PushService.init();
+    } catch (_) {
+      // O acesso ao app nao pode falhar porque o Firebase ainda esta
+      // iniciando ou o aparelho esta sem conexao momentaneamente.
     }
   }
 
