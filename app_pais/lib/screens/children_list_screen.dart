@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,11 +18,6 @@ String _formatDate(String iso) {
   return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
 }
 
-String _formatTime(String? value) {
-  if (value == null || value.length < 5) return '';
-  return value.substring(0, 5);
-}
-
 class _ActiveTrip {
   final String tripId;
   final String routeName;
@@ -28,6 +25,11 @@ class _ActiveTrip {
   final String? lastEventType;
   final DateTime? lastEventAt;
   final DateTime? locationAt;
+  final double? currentLat;
+  final double? currentLng;
+  final double? speedMetersPerSecond;
+  final double? targetLat;
+  final double? targetLng;
 
   _ActiveTrip({
     required this.tripId,
@@ -36,6 +38,11 @@ class _ActiveTrip {
     this.lastEventType,
     this.lastEventAt,
     this.locationAt,
+    this.currentLat,
+    this.currentLng,
+    this.speedMetersPerSecond,
+    this.targetLat,
+    this.targetLng,
   });
 
   String get status {
@@ -55,6 +62,36 @@ class _ActiveTrip {
     if (lastEventType == 'dropped') return Icons.check_circle_rounded;
     return Icons.schedule_rounded;
   }
+
+  int? get etaMinutes {
+    if (lastEventType == 'dropped' ||
+        locationAt == null ||
+        currentLat == null ||
+        currentLng == null ||
+        targetLat == null ||
+        targetLng == null) {
+      return null;
+    }
+    if (DateTime.now().toUtc().difference(locationAt!.toUtc()).inMinutes >= 5) {
+      return null;
+    }
+    double radians(double degrees) => degrees * math.pi / 180;
+    final dLat = radians(targetLat! - currentLat!);
+    final dLng = radians(targetLng! - currentLng!);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(radians(currentLat!)) *
+            math.cos(radians(targetLat!)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    final directKm = 6371 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    if (directKm < .05) return 1;
+    final measuredKmh = (speedMetersPerSecond ?? 0) * 3.6;
+    // Em parada/semaforo, usa uma media urbana conservadora; em movimento,
+    // respeita a velocidade real. O fator 1,25 aproxima a distancia viaria
+    // porque Haversine mede uma linha reta.
+    final effectiveKmh = measuredKmh >= 5 ? measuredKmh.clamp(8, 55) : 22.0;
+    return ((directKm * 1.25 / effectiveKmh) * 60).ceil().clamp(1, 180).toInt();
+  }
 }
 
 class ChildrenListScreen extends StatefulWidget {
@@ -73,11 +110,49 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
   int _newAlerts = 0;
   bool _loading = true;
   bool _maintenance = false;
+  Timer? _liveRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _liveRefreshTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) => _refreshTrips());
+  }
+
+  @override
+  void dispose() {
+    _liveRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _setActiveTrips(List<dynamic> rows) {
+    _activeByStudent.clear();
+    for (final dynamic item in rows) {
+      final row = item as Map<String, dynamic>;
+      double? number(String key) => (row[key] as num?)?.toDouble();
+      _activeByStudent[row['student_id'] as String] = _ActiveTrip(
+        tripId: row['trip_id'] as String,
+        routeName: row['route_name'] as String? ?? 'Rota',
+        direction: row['direction'] as String,
+        lastEventType: row['last_event_type'] as String?,
+        lastEventAt: DateTime.tryParse(row['last_event_at'] as String? ?? ''),
+        locationAt:
+            DateTime.tryParse(row['location_recorded_at'] as String? ?? ''),
+        currentLat: number('current_lat'),
+        currentLng: number('current_lng'),
+        speedMetersPerSecond: number('current_speed'),
+        targetLat: number('target_lat'),
+        targetLng: number('target_lng'),
+      );
+    }
+  }
+
+  Future<void> _refreshTrips() async {
+    if (!mounted || _loading) return;
+    final rows = await Api.activeTrips();
+    if (!mounted) return;
+    setState(() => _setActiveTrips(rows));
   }
 
   Future<void> _load() async {
@@ -113,19 +188,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
     ]);
     if (!mounted) return;
 
-    _activeByStudent.clear();
-    for (final dynamic item in results[0] as List<dynamic>) {
-      final row = item as Map<String, dynamic>;
-      _activeByStudent[row['student_id'] as String] = _ActiveTrip(
-        tripId: row['trip_id'] as String,
-        routeName: row['route_name'] as String? ?? 'Rota',
-        direction: row['direction'] as String,
-        lastEventType: row['last_event_type'] as String?,
-        lastEventAt: DateTime.tryParse(row['last_event_at'] as String? ?? ''),
-        locationAt:
-            DateTime.tryParse(row['location_recorded_at'] as String? ?? ''),
-      );
-    }
+    _setActiveTrips(results[0] as List<dynamic>);
     _paymentStatusByStudent.clear();
     for (final dynamic item in results[1] as List<dynamic>) {
       final p = item as Map<String, dynamic>;
@@ -237,6 +300,10 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
       );
 
   Widget _activeTripCard(Map<String, dynamic> child, _ActiveTrip trip) {
+    final etaMinutes = trip.etaMinutes;
+    final arrival = etaMinutes == null
+        ? null
+        : DateTime.now().add(Duration(minutes: etaMinutes));
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 10),
       padding: const EdgeInsets.all(20),
@@ -299,6 +366,14 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
           const SizedBox(height: 3),
           Text(_updatedLabel(trip.locationAt),
               style: const TextStyle(color: Colors.white, fontSize: 13)),
+          const SizedBox(height: 5),
+          Text(
+            arrival == null
+                ? 'Previsão indisponível até receber um GPS recente'
+                : 'Previsão em tempo real: ${arrival.hour.toString().padLeft(2, '0')}:${arrival.minute.toString().padLeft(2, '0')} (aprox. $etaMinutes min)',
+            style: const TextStyle(
+                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -324,10 +399,6 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
     final absence = _nextAbsenceByStudent[id];
     final name = child['name'] as String;
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
-    final timeToSchool =
-        _formatTime(child['planned_time_to_school'] as String?);
-    final timeToHome = _formatTime(child['planned_time_to_home'] as String?);
-    final plannedRoute = child['planned_route_name'] as String?;
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 6, 16, 8),
       child: Padding(
@@ -420,28 +491,6 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                   onPressed: () => _cancelAbsence(absence['id'] as String),
                   child: const Text('Cancelar'),
                 ),
-              ),
-            ] else if (trip == null && plannedRoute != null) ...[
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.schedule_outlined, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      timeToSchool.isEmpty && timeToHome.isEmpty
-                          ? '$plannedRoute · horários ainda não configurados'
-                          : [
-                              plannedRoute,
-                              if (timeToSchool.isNotEmpty)
-                                'Ida cadastrada: $timeToSchool',
-                              if (timeToHome.isNotEmpty)
-                                'Volta cadastrada: $timeToHome',
-                            ].join('\n'),
-                    ),
-                  ),
-                ],
               ),
             ],
             if (payment != null) ...[

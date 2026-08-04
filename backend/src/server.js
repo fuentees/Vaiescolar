@@ -77,9 +77,9 @@ app.get('/app-version/:app', (req, res) => {
       notes: 'Chat reorganizado, horários separados de ida e volta e notificações sonoras.',
     },
     responsavel: {
-      version: '0.3.0', buildNumber: 4,
+      version: '0.3.1', buildNumber: 5,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar-Responsavel.zip',
-      notes: 'Nova tela inicial, mapa centralizado na van, marcador menor e notificações sonoras.',
+      notes: 'Previsão de chegada em tempo real calculada pelo GPS da van.',
     },
   };
   const version = versions[req.params.app];
@@ -1590,19 +1590,24 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
     `SELECT DISTINCT t.id AS trip_id, t.direction, t.started_at, r.name AS route_name,
             s.id AS student_id, s.name AS student_name,
             event.type AS last_event_type, event.at AS last_event_at,
-            location.recorded_at AS location_recorded_at
+            location.recorded_at AS location_recorded_at,
+            location.lat AS current_lat, location.lng AS current_lng,
+            location.speed AS current_speed,
+            CASE WHEN t.direction='to_school' THEN sc.lat ELSE s.home_lat END AS target_lat,
+            CASE WHEN t.direction='to_school' THEN sc.lng ELSE s.home_lng END AS target_lng
        FROM trips t
        JOIN routes r ON r.id = t.route_id
        JOIN route_students rs ON rs.route_id = t.route_id
        JOIN students s ON s.id = rs.student_id
        JOIN student_guardians sg ON sg.student_id = s.id
+       LEFT JOIN schools sc ON sc.id=s.school_id
        LEFT JOIN LATERAL (
          SELECT te.type, te.at FROM trip_events te
           WHERE te.trip_id=t.id AND te.student_id=s.id
           ORDER BY te.at DESC LIMIT 1
        ) event ON true
        LEFT JOIN LATERAL (
-         SELECT tl.recorded_at FROM trip_last_location tl
+         SELECT tl.recorded_at, tl.lat, tl.lng, tl.speed FROM trip_last_location tl
           WHERE tl.trip_id=t.id ORDER BY tl.recorded_at DESC LIMIT 1
        ) location ON true
       WHERE t.tenant_id = $1
