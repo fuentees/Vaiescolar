@@ -170,6 +170,19 @@ test('aluno pode usar uma rota na ida e outra rota na volta', async () => {
   }, adminToken).then((r) => r.json());
   const inboundStudents = await get(`/api/trips/${inboundTrip.tripId}/students`, adminToken).then((r) => r.json());
   assert.deepEqual(inboundStudents.map((item) => item.id), [student.id]);
+
+  const duplicateRoute = await post('/api/routes', { name: 'Outra Rota de Ida' }, adminToken).then((r) => r.json());
+  const duplicate = await post(`/api/routes/${duplicateRoute.id}/students`, {
+    student_id: student.id, service_direction: 'to_school',
+  }, adminToken);
+  assert.equal(duplicate.status, 409);
+
+  const secondActive = await post('/api/trips/start', {
+    route_id: routeId, direction: 'to_school',
+  }, driverToken).then((r) => r.json());
+  const today = await get('/api/dashboard/today', adminToken).then((r) => r.json());
+  assert.equal(today.activeTrips.length, 2);
+  await post(`/api/trips/${secondActive.tripId}/cancel`, { reason: 'teste' }, driverToken);
   await post(`/api/trips/${inboundTrip.tripId}/cancel`, { reason: 'teste' }, adminToken);
 });
 

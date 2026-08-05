@@ -512,6 +512,7 @@ class Api {
 
   static Future<bool> linkStudentToRoute(
       String routeId, String studentId, String serviceDirection) async {
+    lastError = null;
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/routes/$routeId/students'),
       headers: {
@@ -523,7 +524,13 @@ class Api {
         'service_direction': serviceDirection,
       }),
     );
-    return res.statusCode == 200;
+    if (res.statusCode == 200) return true;
+    try {
+      lastError = jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      lastError = 'Nao foi possivel vincular o aluno.';
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------------

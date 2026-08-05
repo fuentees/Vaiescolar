@@ -35,6 +35,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   List<dynamic> _plannedStops = [];
   bool _loadingStudents = false;
   final Set<String> _busyStudentIds = {};
+  String? _operationalSignature;
 
   Timer? _clockTimer;
   Timer? _studentsRefreshTimer;
@@ -434,12 +435,21 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       return absentA.compareTo(absentB);
     });
     final plan = results[1] as Map<String, dynamic>?;
+    final signature = students
+        .map((student) =>
+            '${student['id']}:${student['absent']}:${student['last_status']}')
+        .join('|');
+    final operationChanged = signature != _operationalSignature;
     if (!mounted) return;
     setState(() {
       _students = students;
+      _operationalSignature = signature;
       _plannedStops = plan?['stops'] as List<dynamic>? ?? [];
       _loadingStudents = false;
     });
+    if (operationChanged) {
+      unawaited(TrackingService.refreshProximityStops());
+    }
   }
 
   Future<void> _showPlannedStops() async {
@@ -559,7 +569,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   }
 
   Future<void> _mark(
-      String studentId, String name, String type, String? currentStatus) async {
+      String studentId, String name, String type, String? currentStatus,
+      {String? authorizedPickup}) async {
     final activeTripId = _activeTripId;
     if (activeTripId == null) return;
     // So confirma no caso de pular etapa (desembarque sem embarque
@@ -584,9 +595,17 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       if (confirmado != true) return;
       if (!mounted) return;
     }
+    String? receivedBy;
+    if (type == 'dropped' && _direction == 'to_home') {
+      receivedBy = await _chooseReceiver(name, authorizedPickup);
+      if (receivedBy == null || receivedBy.trim().isEmpty) return;
+    }
     setState(() => _busyStudentIds.add(studentId));
     final ok = await Api.registerEvent(
-        tripId: activeTripId, studentId: studentId, type: type);
+        tripId: activeTripId,
+        studentId: studentId,
+        type: type,
+        receivedBy: receivedBy);
     if (ok) {
       HapticFeedback.mediumImpact();
       SystemSound.play(SystemSoundType.click);
@@ -595,6 +614,64 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     }
     if (!mounted) return;
     setState(() => _busyStudentIds.remove(studentId));
+  }
+
+  Future<String?> _chooseReceiver(String studentName, String? raw) async {
+    final people = (raw ?? '')
+        .split(RegExp(r'[,;\n]'))
+        .map((name) => name.trim())
+        .where((name) => name.isNotEmpty)
+        .toList();
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Quem recebeu $studentName?'),
+        children: [
+          ...people.map((name) => ListTile(
+                leading: const Icon(Icons.verified_user_outlined),
+                title: Text(name),
+                subtitle: const Text('Pessoa autorizada'),
+                onTap: () => Navigator.pop(context, name),
+              )),
+          ListTile(
+            leading: const Icon(Icons.person_add_outlined),
+            title: const Text('Outra pessoa'),
+            subtitle: const Text('Exige informar o nome'),
+            onTap: () => Navigator.pop(context, '__other__'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.close),
+            title: const Text('Cancelar'),
+            onTap: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+    if (selected != '__other__') return selected;
+    if (!mounted) return null;
+    final controller = TextEditingController();
+    final other = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Identificar quem recebeu'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Nome completo'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Confirmar entrega')),
+        ],
+      ),
+    );
+    controller.dispose();
+    return other;
   }
 
   Future<void> _markNotFound(
@@ -1142,6 +1219,9 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                               : address;
                       final emergencyPhone =
                           s['emergency_contact_phone'] as String?;
+                      final authorizedPickup =
+                          s['authorized_pickup'] as String?;
+                      final medicalNotes = s['medical_notes'] as String?;
                       final busy = _busyStudentIds.contains(id);
                       final statusLabel = emergencyReturn
                           ? 'Retorno de emergência para casa'
@@ -1203,6 +1283,26 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .bodySmall),
+                                        if (medicalNotes != null &&
+                                            medicalNotes.trim().isNotEmpty)
+                                          Container(
+                                            margin:
+                                                const EdgeInsets.only(top: 6),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 5),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.error
+                                                  .withValues(alpha: .10),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                                'Atencao medica: $medicalNotes',
+                                                style: const TextStyle(
+                                                    color: AppColors.error,
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -1281,8 +1381,9 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                 SizedBox(
                                   width: double.infinity,
                                   child: FilledButton.icon(
-                                    onPressed: () =>
-                                        _mark(id, name, 'dropped', status),
+                                    onPressed: () => _mark(
+                                        id, name, 'dropped', status,
+                                        authorizedPickup: authorizedPickup),
                                     icon: const Icon(Icons.home_rounded),
                                     label: const Text('Chegou em casa'),
                                   ),
@@ -1316,7 +1417,9 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                       onPressed: status == 'dropped'
                                           ? null
                                           : () => _mark(
-                                              id, name, 'dropped', status),
+                                              id, name, 'dropped', status,
+                                              authorizedPickup:
+                                                  authorizedPickup),
                                       child: const Text('Desceu'),
                                     ),
                                   ),

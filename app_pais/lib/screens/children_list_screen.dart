@@ -303,7 +303,13 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
   }
 
   Future<void> _cancelAbsence(String absenceId) async {
-    if (await Api.cancelAbsence(absenceId)) await _load();
+    if (await Api.cancelAbsence(absenceId)) {
+      await _load();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(Api.lastError ?? 'Nao foi possivel cancelar a falta.'),
+      ));
+    }
   }
 
   Future<void> _addChild() async {

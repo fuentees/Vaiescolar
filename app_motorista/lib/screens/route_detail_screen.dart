@@ -71,7 +71,13 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     if (direction == null) return;
     final ok = await Api.linkStudentToRoute(
         widget.routeId, chosen['id'] as String, direction);
-    if (ok) _load();
+    if (ok) {
+      _load();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Api.lastError ?? 'Nao foi possivel adicionar.')),
+      );
+    }
   }
 
   Future<String?> _chooseDirection({String current = 'all'}) =>
@@ -116,7 +122,13 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     if (direction == null) return;
     final ok = await Api.linkStudentToRoute(
         widget.routeId, student['id'] as String, direction);
-    if (ok) _load();
+    if (ok) {
+      _load();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Api.lastError ?? 'Nao foi possivel alterar.')),
+      );
+    }
   }
 
   String _directionLabel(dynamic value) => switch (value) {

@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.24', buildNumber: 4030, releaseBuild: 30,
+      version: '1.0.25', buildNumber: 4031, releaseBuild: 31,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Permite usar rotas diferentes na ida e na volta, com GPS, lotacao e avisos separados.',
+      notes: 'Operacao diaria reforcada: dias, varias vans, faltas, duplicidades, recebedores e alertas preventivos.',
     },
     responsavel: {
-      version: '1.0.24', buildNumber: 4030, releaseBuild: 30,
+      version: '1.0.25', buildNumber: 4031, releaseBuild: 31,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Permite usar rotas diferentes na ida e na volta, com GPS, lotacao e avisos separados.',
+      notes: 'Operacao diaria reforcada: dias, varias vans, faltas, duplicidades, recebedores e alertas preventivos.',
     },
   };
   const version = versions[req.params.app];
@@ -1070,6 +1070,10 @@ app.post('/api/routes', authMiddleware, requireRole('admin'), validateBody(route
       days_of_week || null, planned_time || null, planned_time_to_school || null,
       planned_time_to_home || null, active ?? true]
   );
+  await logAudit(req, 'criar_rota', 'route', r.rows[0].id, {
+    name, vehicle_id: vehicle_id || null, driver_user_id: driver_user_id || null,
+    days_of_week: days_of_week || null,
+  });
   res.json(r.rows[0]);
 });
 
@@ -1086,8 +1090,9 @@ app.get('/api/routes', authMiddleware, async (req, res) => {
     return res.json(own.rows);
   }
   const r = await db.query(
-    'SELECT * FROM routes WHERE tenant_id=$1 ORDER BY name',
-    [req.auth.tenantId]
+    `SELECT * FROM routes WHERE tenant_id=$1
+      AND ($2='admin' OR driver_user_id=$3) ORDER BY name`,
+    [req.auth.tenantId, req.auth.role, req.auth.userId]
   );
   res.json(r.rows);
 });
@@ -1117,6 +1122,10 @@ app.put('/api/routes/:id', authMiddleware, requireRole('admin'), validateBody(ro
       req.auth.tenantId]
   );
   if (r.rows.length === 0) return res.status(404).json({ error: 'rota nao encontrada' });
+  await logAudit(req, 'editar_rota', 'route', req.params.id, {
+    name, vehicle_id: vehicle_id || null, driver_user_id: driver_user_id || null,
+    days_of_week: days_of_week || null,
+  });
   res.json(r.rows[0]);
 });
 
@@ -1180,6 +1189,21 @@ app.post('/api/routes/:id/students', authMiddleware, requireRole('admin'), async
     [student_id, req.auth.tenantId]
   );
   if (st.rows.length === 0) return res.status(404).json({ error: 'aluno nao encontrado' });
+  const conflicts = await db.query(
+    `SELECT r.id, r.name, r.days_of_week, rs.service_direction
+       FROM route_students rs JOIN routes r ON r.id=rs.route_id
+      WHERE rs.student_id=$1 AND rs.tenant_id=$2 AND r.id<>$3`,
+    [student_id, req.auth.tenantId, req.params.id]
+  );
+  const targetRoute = await db.query('SELECT days_of_week FROM routes WHERE id=$1', [req.params.id]);
+  const daySet = (value) => value ? new Set(String(value).split(',')) : new Set(['1','2','3','4','5','6','7']);
+  const targetDays = daySet(targetRoute.rows[0]?.days_of_week);
+  const directionOverlaps = (a, b) => a === 'all' || b === 'all' || a === b;
+  const conflict = conflicts.rows.find((row) => directionOverlaps(row.service_direction, serviceDirection) &&
+    [...daySet(row.days_of_week)].some((day) => targetDays.has(day)));
+  if (conflict) {
+    return res.status(409).json({ error: `aluno ja atende esse sentido nos mesmos dias em ${conflict.name}` });
+  }
   // Novo vinculo vai pro fim da fila de embarque.
   const pos = await db.query('SELECT COALESCE(max(position)+1, 0) AS next FROM route_students WHERE route_id=$1', [
     req.params.id,
@@ -1747,19 +1771,25 @@ app.post('/api/absences', authMiddleware, async (req, res) => {
 
 app.get('/api/dashboard/today', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
   const driverFilter = req.auth.role === 'driver' ? req.auth.userId : null;
-  const [routes, absences, activeTrip, completedTrips] = await Promise.all([
+  const [routes, absences, activeTrips, completedTrips, incompleteStudents, expiringVehicles] = await Promise.all([
     db.query(
       `SELECT r.id, r.name, r.planned_time_to_school, r.planned_time_to_home,
               v.plate AS vehicle_plate, u.name AS driver_name,
               count(rs.student_id)::int AS student_count,
               count(rs.student_id) FILTER (WHERE rs.service_direction IN ('all','to_school'))::int AS to_school_count,
-              count(rs.student_id) FILTER (WHERE rs.service_direction IN ('all','to_home'))::int AS to_home_count
+              count(rs.student_id) FILTER (WHERE rs.service_direction IN ('all','to_home'))::int AS to_home_count,
+              EXISTS(SELECT 1 FROM trips t WHERE t.route_id=r.id AND t.direction='to_school'
+                AND (t.started_at AT TIME ZONE 'America/Sao_Paulo')::date=(now() AT TIME ZONE 'America/Sao_Paulo')::date) AS to_school_started,
+              EXISTS(SELECT 1 FROM trips t WHERE t.route_id=r.id AND t.direction='to_home'
+                AND (t.started_at AT TIME ZONE 'America/Sao_Paulo')::date=(now() AT TIME ZONE 'America/Sao_Paulo')::date) AS to_home_started
          FROM routes r
          LEFT JOIN vehicles v ON v.id=r.vehicle_id
          LEFT JOIN users u ON u.id=r.driver_user_id
          LEFT JOIN route_students rs ON rs.route_id=r.id
         WHERE r.tenant_id=$1 AND r.active=true
           AND ($2::uuid IS NULL OR r.driver_user_id=$2)
+          AND (r.days_of_week IS NULL OR r.days_of_week='' OR
+               extract(isodow from now() AT TIME ZONE 'America/Sao_Paulo')::int::text = ANY(string_to_array(r.days_of_week, ',')))
         GROUP BY r.id, v.plate, u.name ORDER BY r.name`,
       [req.auth.tenantId, driverFilter]),
     db.query(
@@ -1773,11 +1803,14 @@ app.get('/api/dashboard/today', authMiddleware, requireRole('driver', 'admin'), 
           AND ab.date=(now() AT TIME ZONE 'America/Sao_Paulo')::date
           AND ($2::uuid IS NULL OR r.driver_user_id=$2)
           AND (ab.direction='all' OR rs.service_direction='all' OR rs.service_direction=ab.direction)
+          AND (r.days_of_week IS NULL OR r.days_of_week='' OR
+               extract(isodow from now() AT TIME ZONE 'America/Sao_Paulo')::int::text = ANY(string_to_array(r.days_of_week, ',')))
         ORDER BY s.name`,
       [req.auth.tenantId, driverFilter]),
     db.query(
       `SELECT t.id, t.direction, t.started_at, r.name AS route_name,
               v.plate AS vehicle_plate,
+              extract(epoch from (now()-t.started_at))::int AS duration_seconds,
               count(DISTINCT te.student_id) FILTER (WHERE te.type='boarded')::int AS boarded_count,
               count(DISTINCT te.student_id) FILTER (WHERE te.type IN ('dropped','not_found'))::int AS completed_count
          FROM trips t JOIN routes r ON r.id=t.route_id
@@ -1785,7 +1818,7 @@ app.get('/api/dashboard/today', authMiddleware, requireRole('driver', 'admin'), 
          LEFT JOIN trip_events te ON te.trip_id=t.id
         WHERE t.tenant_id=$1 AND t.status='active'
           AND ($2::uuid IS NULL OR t.driver_user_id=$2)
-        GROUP BY t.id, r.name, v.plate ORDER BY t.started_at DESC LIMIT 1`,
+        GROUP BY t.id, r.name, v.plate ORDER BY t.started_at DESC`,
       [req.auth.tenantId, driverFilter]),
     db.query(
       `SELECT count(*)::int AS count FROM trips
@@ -1793,10 +1826,22 @@ app.get('/api/dashboard/today', authMiddleware, requireRole('driver', 'admin'), 
           AND (finished_at AT TIME ZONE 'America/Sao_Paulo')::date=(now() AT TIME ZONE 'America/Sao_Paulo')::date
           AND ($2::uuid IS NULL OR driver_user_id=$2)`,
       [req.auth.tenantId, driverFilter]),
+    db.query(
+      `SELECT id, name FROM students WHERE tenant_id=$1 AND active=true
+        AND (home_address IS NULL OR trim(home_address)='' OR home_lat IS NULL OR home_lng IS NULL
+             OR school_id IS NULL OR emergency_contact_phone IS NULL OR trim(emergency_contact_phone)='')
+        ORDER BY name LIMIT 20`, [req.auth.tenantId]),
+    db.query(
+      `SELECT id, plate, document_expiry FROM vehicles WHERE tenant_id=$1
+        AND document_expiry IS NOT NULL AND document_expiry <= CURRENT_DATE + 30
+        ORDER BY document_expiry`, [req.auth.tenantId]),
   ]);
   res.json({ routes: routes.rows, absences: absences.rows,
-    activeTrip: activeTrip.rows[0] || null,
-    completedTripsToday: completedTrips.rows[0]?.count || 0 });
+    activeTrips: activeTrips.rows, activeTrip: activeTrips.rows[0] || null,
+    brasiliaTime: new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()),
+    completedTripsToday: completedTrips.rows[0]?.count || 0,
+    incompleteStudents: req.auth.role === 'admin' ? incompleteStudents.rows : [],
+    expiringVehicles: req.auth.role === 'admin' ? expiringVehicles.rows : [] });
 });
 
 app.delete('/api/absences/:id', authMiddleware, async (req, res) => {
@@ -1806,6 +1851,21 @@ app.delete('/api/absences/:id', authMiddleware, async (req, res) => {
   if (a.rows.length === 0) return res.status(404).json({ error: 'falta nao encontrada' });
   if (!(await assertOwnsStudentOrAdmin(req, a.rows[0].student_id))) {
     return res.status(403).json({ error: 'sem permissao' });
+  }
+  const operational = await db.query(
+    `SELECT t.status,
+            EXISTS(SELECT 1 FROM trip_events te WHERE te.trip_id=t.id
+                    AND te.student_id=$2 AND te.type='boarded') AS boarded
+       FROM trips t JOIN route_students rs ON rs.route_id=t.route_id
+      WHERE t.tenant_id=$1 AND rs.student_id=$2
+        AND (t.started_at AT TIME ZONE 'America/Sao_Paulo')::date=$3
+        AND ($4='all' OR t.direction=$4)
+        AND rs.service_direction IN ('all', t.direction)
+        AND t.status IN ('active','finished')`,
+    [req.auth.tenantId, a.rows[0].student_id, a.rows[0].date, a.rows[0].direction]
+  );
+  if (operational.rows.some((trip) => trip.boarded || trip.status === 'finished')) {
+    return res.status(409).json({ error: 'nao e possivel cancelar a falta depois do embarque ou do fim da rota' });
   }
   const recipients = await db.query(
     `SELECT DISTINCT rt.driver_user_id AS id FROM routes rt
@@ -1876,7 +1936,7 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
   // Confirma que a rota pertence ao tenant, esta ativa e, quando possui um
   // motorista fixo, que nao esta sendo iniciada por outro motorista.
   const rt = await db.query(
-    `SELECT r.id, r.vehicle_id, r.driver_user_id, r.active,
+    `SELECT r.id, r.vehicle_id, r.driver_user_id, r.active, r.days_of_week,
             (SELECT count(*) FROM route_students rs
               WHERE rs.route_id=r.id AND rs.service_direction IN ('all', $3)) AS student_count
        FROM routes r WHERE r.id=$1 AND r.tenant_id=$2`,
@@ -1884,6 +1944,15 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
   );
   if (rt.rows.length === 0) return res.status(404).json({ error: 'rota nao encontrada' });
   if (!rt.rows[0].active) return res.status(409).json({ error: 'rota inativa' });
+  if (rt.rows[0].days_of_week) {
+    const today = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo', weekday: 'short'
+    }).format(new Date());
+    const isoDay = ({ Mon: '1', Tue: '2', Wed: '3', Thu: '4', Fri: '5', Sat: '6', Sun: '7' })[today];
+    if (!String(rt.rows[0].days_of_week).split(',').includes(isoDay)) {
+      return res.status(409).json({ error: 'esta rota nao esta programada para hoje' });
+    }
+  }
   if (Number(rt.rows[0].student_count) === 0) {
     return res.status(409).json({ error: 'rota sem alunos vinculados' });
   }
@@ -2182,6 +2251,7 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
 app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
   const r = await db.query(
     `SELECT s.id, s.name, s.home_address, s.home_lat, s.home_lng, s.emergency_contact_phone,
+            s.authorized_pickup, s.medical_notes,
             s.school_id, COALESCE(sc.name, s.school_name) AS school_name,
             sc.address AS school_address, sc.lat AS school_lat, sc.lng AS school_lng,
             (SELECT te.type FROM trip_events te

@@ -368,10 +368,17 @@ class Api {
   }
 
   static Future<bool> cancelAbsence(String absenceId) async {
+    lastError = null;
     final res = await http.delete(
       Uri.parse('${Config.apiBase}/api/absences/$absenceId'),
       headers: {'authorization': 'Bearer $_token'},
     );
-    return res.statusCode == 200;
+    if (res.statusCode == 200) return true;
+    try {
+      lastError = jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      lastError = 'Nao foi possivel cancelar a falta.';
+    }
+    return false;
   }
 }

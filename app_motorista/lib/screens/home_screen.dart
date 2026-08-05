@@ -216,31 +216,36 @@ class _TodaySection extends StatelessWidget {
     }
     final routes = data!['routes'] as List<dynamic>? ?? [];
     final absences = data!['absences'] as List<dynamic>? ?? [];
-    final active = data!['activeTrip'] as Map<String, dynamic>?;
+    final activeTrips = data!['activeTrips'] as List<dynamic>? ??
+        [if (data!['activeTrip'] != null) data!['activeTrip']];
     final completed = data!['completedTripsToday'] ?? 0;
+    final incomplete = data!['incompleteStudents'] as List<dynamic>? ?? [];
+    final expiring = data!['expiringVehicles'] as List<dynamic>? ?? [];
+    final nowTime = data!['brasiliaTime'] as String? ?? '00:00';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('Operacao de hoje',
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        if (active != null)
-          Card(
-            color: AppColors.success.withValues(alpha: .10),
-            child: ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: AppColors.success,
-                foregroundColor: Colors.white,
-                child: Icon(Icons.navigation_rounded),
-              ),
-              title: Text('${active['route_name']} em andamento'),
-              subtitle: Text('${_direction(active['direction'])} - '
-                  '${active['vehicle_plate'] ?? 'veiculo nao informado'}\n'
-                  '${active['boarded_count'] ?? 0} embarcados - ${active['completed_count'] ?? 0} concluidos'),
-              isThreeLine: true,
-              trailing: const Chip(label: Text('ATIVA')),
-            ),
-          )
+        if (activeTrips.isNotEmpty)
+          ...activeTrips.map((active) => Card(
+                color: AppColors.success.withValues(alpha: .10),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
+                    child: Icon(Icons.navigation_rounded),
+                  ),
+                  title: Text(
+                      '${active['route_name']} em andamento${((active['duration_seconds'] as num?)?.toInt() ?? 0) > 14400 ? ' - VERIFICAR' : ''}'),
+                  subtitle: Text('${_direction(active['direction'])} - '
+                      '${active['vehicle_plate'] ?? 'veiculo nao informado'}\n'
+                      '${active['boarded_count'] ?? 0} embarcados - ${active['completed_count'] ?? 0} concluidos'),
+                  isThreeLine: true,
+                  trailing: const Chip(label: Text('ATIVA')),
+                ),
+              ))
         else
           Card(
             child: ListTile(
@@ -293,6 +298,22 @@ class _TodaySection extends StatelessWidget {
                       'Ida ${route['planned_time_to_school']}',
                     if (route['planned_time_to_home'] != null)
                       'Volta ${route['planned_time_to_home']}',
+                    if (route['planned_time_to_school'] != null &&
+                        route['to_school_started'] != true &&
+                        route['planned_time_to_school']
+                                .toString()
+                                .substring(0, 5)
+                                .compareTo(nowTime) <
+                            0)
+                      'IDA NAO INICIADA',
+                    if (route['planned_time_to_home'] != null &&
+                        route['to_home_started'] != true &&
+                        route['planned_time_to_home']
+                                .toString()
+                                .substring(0, 5)
+                                .compareTo(nowTime) <
+                            0)
+                      'VOLTA NAO INICIADA',
                   ].join(' - ')),
                 ),
               )),
@@ -313,6 +334,35 @@ class _TodaySection extends StatelessWidget {
                   _ => 'ida e volta'
                 }}'),
               )),
+        ],
+        if (incomplete.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Card(
+            color: AppColors.error.withValues(alpha: .08),
+            child: ListTile(
+              leading: const Icon(Icons.assignment_late_outlined,
+                  color: AppColors.error),
+              title:
+                  Text('${incomplete.length} cadastros de alunos incompletos'),
+              subtitle: Text(incomplete.map((item) => item['name']).join(', '),
+                  maxLines: 3, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ],
+        if (expiring.isNotEmpty) ...[
+          Card(
+            color: AppColors.accent.withValues(alpha: .08),
+            child: ListTile(
+              leading: const Icon(Icons.event_busy_outlined,
+                  color: AppColors.accent),
+              title: const Text(
+                  'Documentos de veiculos vencidos ou proximos do vencimento'),
+              subtitle: Text(expiring
+                  .map(
+                      (item) => '${item['plate']} (${item['document_expiry']})')
+                  .join(', ')),
+            ),
+          ),
         ],
       ],
     );
