@@ -219,7 +219,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       _busy = true;
       _error = null;
     });
-    final linkedStudents = await Api.routeStudents(_routeId!);
+    final linkedStudents =
+        await Api.routeStudents(_routeId!, direction: _direction);
     if (!mounted) return;
     if (linkedStudents.isEmpty) {
       setState(() {

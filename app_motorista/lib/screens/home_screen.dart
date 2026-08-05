@@ -287,7 +287,8 @@ class _TodaySection extends StatelessWidget {
                     if (isAdmin && route['driver_name'] != null)
                       route['driver_name'],
                     route['vehicle_plate'] ?? 'Sem veiculo',
-                    '${route['student_count'] ?? 0} alunos',
+                    'Ida: ${route['to_school_count'] ?? route['student_count'] ?? 0} alunos',
+                    'Volta: ${route['to_home_count'] ?? route['student_count'] ?? 0} alunos',
                     if (route['planned_time_to_school'] != null)
                       'Ida ${route['planned_time_to_school']}',
                     if (route['planned_time_to_home'] != null)

@@ -496,9 +496,14 @@ class Api {
     return res.statusCode == 200;
   }
 
-  static Future<List<dynamic>> routeStudents(String routeId) async {
+  static Future<List<dynamic>> routeStudents(String routeId,
+      {String? direction}) async {
+    final uri = Uri.parse('${Config.apiBase}/api/routes/$routeId/students')
+        .replace(
+            queryParameters:
+                direction == null ? null : {'direction': direction});
     final res = await http.get(
-      Uri.parse('${Config.apiBase}/api/routes/$routeId/students'),
+      uri,
       headers: {'authorization': 'Bearer $_token'},
     );
     if (res.statusCode != 200) return [];
@@ -506,14 +511,17 @@ class Api {
   }
 
   static Future<bool> linkStudentToRoute(
-      String routeId, String studentId) async {
+      String routeId, String studentId, String serviceDirection) async {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/routes/$routeId/students'),
       headers: {
         'authorization': 'Bearer $_token',
         'content-type': 'application/json'
       },
-      body: jsonEncode({'student_id': studentId}),
+      body: jsonEncode({
+        'student_id': studentId,
+        'service_direction': serviceDirection,
+      }),
     );
     return res.statusCode == 200;
   }

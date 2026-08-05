@@ -142,6 +142,37 @@ test('admin lista e cancela convite pendente, que deixa de funcionar', async () 
   assert.equal((await registration.json()).error, 'codigo cancelado');
 });
 
+test('aluno pode usar uma rota na ida e outra rota na volta', async () => {
+  const student = await post('/api/students', { name: 'Aluno Rotas Separadas' }, adminToken).then((r) => r.json());
+  const outbound = await post('/api/routes', { name: 'Rota Somente Ida' }, adminToken).then((r) => r.json());
+  const inbound = await post('/api/routes', { name: 'Rota Somente Volta' }, adminToken).then((r) => r.json());
+  await post(`/api/routes/${outbound.id}/students`, {
+    student_id: student.id, service_direction: 'to_school',
+  }, adminToken);
+  await post(`/api/routes/${inbound.id}/students`, {
+    student_id: student.id, service_direction: 'to_home',
+  }, adminToken);
+
+  const outboundTrip = await post('/api/trips/start', {
+    route_id: outbound.id, direction: 'to_school',
+  }, adminToken).then((r) => r.json());
+  const outboundStudents = await get(`/api/trips/${outboundTrip.tripId}/students`, adminToken).then((r) => r.json());
+  assert.deepEqual(outboundStudents.map((item) => item.id), [student.id]);
+  await post(`/api/trips/${outboundTrip.tripId}/cancel`, { reason: 'teste' }, adminToken);
+
+  const wrongDirection = await post('/api/trips/start', {
+    route_id: outbound.id, direction: 'to_home',
+  }, adminToken);
+  assert.equal(wrongDirection.status, 409);
+
+  const inboundTrip = await post('/api/trips/start', {
+    route_id: inbound.id, direction: 'to_home',
+  }, adminToken).then((r) => r.json());
+  const inboundStudents = await get(`/api/trips/${inboundTrip.tripId}/students`, adminToken).then((r) => r.json());
+  assert.deepEqual(inboundStudents.map((item) => item.id), [student.id]);
+  await post(`/api/trips/${inboundTrip.tripId}/cancel`, { reason: 'teste' }, adminToken);
+});
+
 test('GET /api/notifications devolve o embarque pro pai', async () => {
   const res = await get('/api/notifications', parentToken).then((r) => r.json());
   assert.ok(res.some((n) => n.type === 'trip_event' && n.message.includes('embarcou')));

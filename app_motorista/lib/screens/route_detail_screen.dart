@@ -66,10 +66,64 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       ),
     );
     if (chosen == null) return;
-    final ok =
-        await Api.linkStudentToRoute(widget.routeId, chosen['id'] as String);
+    if (!mounted) return;
+    final direction = await _chooseDirection();
+    if (direction == null) return;
+    final ok = await Api.linkStudentToRoute(
+        widget.routeId, chosen['id'] as String, direction);
     if (ok) _load();
   }
+
+  Future<String?> _chooseDirection({String current = 'all'}) =>
+      showDialog<String>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: const Text('Quando este aluno usa a rota?'),
+          children: [
+            ListTile(
+              leading: Icon(current == 'all'
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off),
+              title: const Text('Ida e volta'),
+              subtitle:
+                  const Text('Vai para a escola e volta para casa nesta rota'),
+              onTap: () => Navigator.pop(context, 'all'),
+            ),
+            ListTile(
+              leading: Icon(current == 'to_school'
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off),
+              title: const Text('Somente ida'),
+              subtitle: const Text('Usa esta rota apenas para ir à escola'),
+              onTap: () => Navigator.pop(context, 'to_school'),
+            ),
+            ListTile(
+              leading: Icon(current == 'to_home'
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off),
+              title: const Text('Somente volta'),
+              subtitle:
+                  const Text('Usa esta rota apenas para voltar para casa'),
+              onTap: () => Navigator.pop(context, 'to_home'),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _changeDirection(Map<String, dynamic> student) async {
+    final direction = await _chooseDirection(
+        current: student['service_direction'] as String? ?? 'all');
+    if (direction == null) return;
+    final ok = await Api.linkStudentToRoute(
+        widget.routeId, student['id'] as String, direction);
+    if (ok) _load();
+  }
+
+  String _directionLabel(dynamic value) => switch (value) {
+        'to_school' => 'Somente ida para a escola',
+        'to_home' => 'Somente volta para casa',
+        _ => 'Ida e volta',
+      };
 
   Future<void> _reorder(int oldIndex, int newIndex) async {
     setState(() {
@@ -147,12 +201,20 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                               child: Icon(Icons.school, size: 20),
                             ),
                             title: Text(s['name'] as String),
-                            subtitle: Text(school?.isNotEmpty == true
-                                ? school!
-                                : 'Escola nao informada'),
+                            subtitle: Text([
+                              school?.isNotEmpty == true
+                                  ? school!
+                                  : 'Escola nao informada',
+                              _directionLabel(s['service_direction']),
+                            ].join(' · ')),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                IconButton(
+                                  icon: const Icon(Icons.sync_alt, size: 20),
+                                  tooltip: 'Alterar ida/volta',
+                                  onPressed: () => _changeDirection(s),
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.remove_circle_outline,
                                       size: 20),

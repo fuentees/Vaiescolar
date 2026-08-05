@@ -148,6 +148,10 @@ CREATE TABLE IF NOT EXISTS route_students (
 -- Ordem de embarque dentro da rota (quem pega primeiro). Alunos antigos
 -- ficam todos com 0 (empate por nome); novos vinculos vao pro fim da fila.
 ALTER TABLE route_students ADD COLUMN IF NOT EXISTS position INT NOT NULL DEFAULT 0;
+ALTER TABLE route_students ADD COLUMN IF NOT EXISTS service_direction TEXT NOT NULL DEFAULT 'all';
+ALTER TABLE route_students DROP CONSTRAINT IF EXISTS route_students_service_direction_check;
+ALTER TABLE route_students ADD CONSTRAINT route_students_service_direction_check
+  CHECK (service_direction IN ('all','to_school','to_home'));
 
 -- Uma viagem concreta (ida ou volta) de uma rota, num dia.
 CREATE TABLE IF NOT EXISTS trips (

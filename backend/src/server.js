@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.23', buildNumber: 4029, releaseBuild: 29,
+      version: '1.0.24', buildNumber: 4030, releaseBuild: 30,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Corrige aviso incorreto de rota ativa e encerra rastreamento local abandonado.',
+      notes: 'Permite usar rotas diferentes na ida e na volta, com GPS, lotacao e avisos separados.',
     },
     responsavel: {
-      version: '1.0.23', buildNumber: 4029, releaseBuild: 29,
+      version: '1.0.24', buildNumber: 4030, releaseBuild: 30,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Corrige aviso incorreto de rota ativa e encerra rastreamento local abandonado.',
+      notes: 'Permite usar rotas diferentes na ida e na volta, com GPS, lotacao e avisos separados.',
     },
   };
   const version = versions[req.params.app];
@@ -1162,6 +1162,8 @@ app.post('/api/students/:id/guardians', authMiddleware, requireRole('admin'), as
 // Vincula um aluno a uma rota (confirma que rota e aluno sao do mesmo tenant).
 app.post('/api/routes/:id/students', authMiddleware, requireRole('admin'), async (req, res) => {
   const { student_id } = req.body;
+  const serviceDirection = ['all', 'to_school', 'to_home'].includes(req.body.service_direction)
+    ? req.body.service_direction : 'all';
   const rt = await db.query(
     'SELECT id FROM routes WHERE id=$1 AND tenant_id=$2',
     [req.params.id, req.auth.tenantId]
@@ -1177,9 +1179,10 @@ app.post('/api/routes/:id/students', authMiddleware, requireRole('admin'), async
     req.params.id,
   ]);
   await db.query(
-    `INSERT INTO route_students(tenant_id, route_id, student_id, position)
-     VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-    [req.auth.tenantId, req.params.id, student_id, pos.rows[0].next]
+    `INSERT INTO route_students(tenant_id, route_id, student_id, position, service_direction)
+     VALUES($1,$2,$3,$4,$5) ON CONFLICT (route_id, student_id)
+     DO UPDATE SET service_direction=EXCLUDED.service_direction`,
+    [req.auth.tenantId, req.params.id, student_id, pos.rows[0].next, serviceDirection]
   );
   res.json({ ok: true });
 });
@@ -1202,15 +1205,23 @@ app.put('/api/routes/:id/students/reorder', authMiddleware, requireRole('admin')
 
 // Alunos ja vinculados a uma rota (fora do contexto de uma viagem especifica
 // -- usado na tela de gestao de rotas para saber quem ja esta cadastrado).
-app.get('/api/routes/:id/students', authMiddleware, requireRole('admin'), async (req, res) => {
-  const rt = await db.query('SELECT id FROM routes WHERE id=$1 AND tenant_id=$2', [req.params.id, req.auth.tenantId]);
+app.get('/api/routes/:id/students', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const direction = ['to_school', 'to_home'].includes(req.query.direction)
+    ? req.query.direction : null;
+  const rt = await db.query('SELECT id, driver_user_id FROM routes WHERE id=$1 AND tenant_id=$2', [req.params.id, req.auth.tenantId]);
   if (rt.rows.length === 0) return res.status(404).json({ error: 'rota nao encontrada' });
+  if (req.auth.role === 'driver' && rt.rows[0].driver_user_id &&
+      rt.rows[0].driver_user_id !== req.auth.userId) {
+    return res.status(403).json({ error: 'rota atribuida a outro motorista' });
+  }
   const r = await db.query(
-    `SELECT s.id, s.name, COALESCE(sc.name, s.school_name) AS school_name, rs.position
+    `SELECT s.id, s.name, COALESCE(sc.name, s.school_name) AS school_name,
+            rs.position, rs.service_direction
        FROM route_students rs
        JOIN students s ON s.id = rs.student_id
        LEFT JOIN schools sc ON sc.id = s.school_id
       WHERE rs.route_id = $1 AND rs.tenant_id = $2
+        AND ($3::text IS NULL OR rs.service_direction IN ('all', $3))
       ORDER BY rs.position, s.name`,
     [req.params.id, req.auth.tenantId]
   );
@@ -1562,6 +1573,7 @@ app.get('/api/trips/history', authMiddleware, async (req, res) => {
        JOIN routes r ON r.id = t.route_id
        JOIN users u ON u.id = t.driver_user_id
        JOIN route_students rs ON rs.route_id = t.route_id AND rs.student_id = $2
+        AND rs.service_direction IN ('all', t.direction)
       WHERE t.tenant_id=$1 AND t.status='finished'
       ORDER BY t.finished_at DESC
       LIMIT $3 OFFSET $4`,
@@ -1632,6 +1644,7 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
               SELECT 1 FROM route_students rs
               JOIN routes rt ON rt.id=rs.route_id
               WHERE rs.student_id=ab.student_id AND rt.driver_user_id=$2
+                AND (ab.direction='all' OR rs.service_direction='all' OR rs.service_direction=ab.direction)
             ))
        ) x
        WHERE x.created_at > COALESCE(
@@ -1709,11 +1722,13 @@ app.post('/api/absences', authMiddleware, async (req, res) => {
        UNION SELECT rt.driver_user_id FROM routes rt
          JOIN route_students rs ON rs.route_id=rt.id
         WHERE rt.tenant_id=$1 AND rs.student_id=$2 AND rt.driver_user_id IS NOT NULL
+          AND ($3='all' OR rs.service_direction IN ('all', $3))
        UNION SELECT t.driver_user_id FROM trips t
          JOIN route_students rs ON rs.route_id=t.route_id
+          AND rs.service_direction IN ('all', t.direction)
         WHERE t.tenant_id=$1 AND rs.student_id=$2 AND t.status='active'
      ) recipients WHERE id IS NOT NULL`,
-    [req.auth.tenantId, student_id]
+    [req.auth.tenantId, student_id, direction]
   );
   const student = await db.query('SELECT name FROM students WHERE id=$1', [student_id]);
   const directionLabel = direction === 'to_school' ? 'na ida' : direction === 'to_home' ? 'na volta' : 'na ida e na volta';
@@ -1730,7 +1745,9 @@ app.get('/api/dashboard/today', authMiddleware, requireRole('driver', 'admin'), 
     db.query(
       `SELECT r.id, r.name, r.planned_time_to_school, r.planned_time_to_home,
               v.plate AS vehicle_plate, u.name AS driver_name,
-              count(rs.student_id)::int AS student_count
+              count(rs.student_id)::int AS student_count,
+              count(rs.student_id) FILTER (WHERE rs.service_direction IN ('all','to_school'))::int AS to_school_count,
+              count(rs.student_id) FILTER (WHERE rs.service_direction IN ('all','to_home'))::int AS to_home_count
          FROM routes r
          LEFT JOIN vehicles v ON v.id=r.vehicle_id
          LEFT JOIN users u ON u.id=r.driver_user_id
@@ -1749,6 +1766,7 @@ app.get('/api/dashboard/today', authMiddleware, requireRole('driver', 'admin'), 
         WHERE ab.tenant_id=$1
           AND ab.date=(now() AT TIME ZONE 'America/Sao_Paulo')::date
           AND ($2::uuid IS NULL OR r.driver_user_id=$2)
+          AND (ab.direction='all' OR rs.service_direction='all' OR rs.service_direction=ab.direction)
         ORDER BY s.name`,
       [req.auth.tenantId, driverFilter]),
     db.query(
@@ -1787,8 +1805,9 @@ app.delete('/api/absences/:id', authMiddleware, async (req, res) => {
     `SELECT DISTINCT rt.driver_user_id AS id FROM routes rt
        JOIN route_students rs ON rs.route_id=rt.id
       WHERE rt.tenant_id=$1 AND rs.student_id=$2 AND rt.driver_user_id IS NOT NULL
+        AND ($3='all' OR rs.service_direction IN ('all', $3))
      UNION SELECT id FROM users WHERE tenant_id=$1 AND role='admin' AND active=true`,
-    [req.auth.tenantId, a.rows[0].student_id]
+    [req.auth.tenantId, a.rows[0].student_id, a.rows[0].direction]
   );
   const student = await db.query('SELECT name FROM students WHERE id=$1', [a.rows[0].student_id]);
   await db.query('DELETE FROM absences WHERE id=$1', [req.params.id]);
@@ -1852,9 +1871,10 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
   // motorista fixo, que nao esta sendo iniciada por outro motorista.
   const rt = await db.query(
     `SELECT r.id, r.vehicle_id, r.driver_user_id, r.active,
-            (SELECT count(*) FROM route_students rs WHERE rs.route_id=r.id) AS student_count
+            (SELECT count(*) FROM route_students rs
+              WHERE rs.route_id=r.id AND rs.service_direction IN ('all', $3)) AS student_count
        FROM routes r WHERE r.id=$1 AND r.tenant_id=$2`,
-    [route_id, req.auth.tenantId]
+    [route_id, req.auth.tenantId, direction]
   );
   if (rt.rows.length === 0) return res.status(404).json({ error: 'rota nao encontrada' });
   if (!rt.rows[0].active) return res.status(409).json({ error: 'rota inativa' });
@@ -1883,6 +1903,7 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
          FROM vehicles v
          JOIN routes r ON r.id=$2 AND r.tenant_id=$3
          LEFT JOIN route_students rs ON rs.route_id=r.id
+          AND rs.service_direction IN ('all', $4)
          LEFT JOIN absences ab ON ab.student_id=rs.student_id
           AND ab.date=(now() AT TIME ZONE 'America/Sao_Paulo')::date
           AND ab.direction IN ('all', $4)
@@ -1927,8 +1948,8 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
     `SELECT DISTINCT sg.guardian_user_id
        FROM route_students rs
        JOIN student_guardians sg ON sg.student_id = rs.student_id
-      WHERE rs.route_id = $1`,
-    [route_id]
+      WHERE rs.route_id = $1 AND rs.service_direction IN ('all', $2)`,
+    [route_id, direction]
   )
     .then((parents) =>
       push.sendToUsers(
@@ -1949,6 +1970,7 @@ app.post('/api/trips/:id/finish', authMiddleware, requireRole('driver', 'admin')
     `SELECT s.id, s.name
        FROM trips t
        JOIN route_students rs ON rs.route_id=t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN students s ON s.id=rs.student_id
        LEFT JOIN absences ab ON ab.student_id=s.id
         AND ab.date=(t.started_at AT TIME ZONE 'America/Sao_Paulo')::date
@@ -1991,6 +2013,7 @@ async function tripGuardianIds(tripId, tenantId) {
     `SELECT DISTINCT sg.guardian_user_id
        FROM trips t
        JOIN route_students rs ON rs.route_id=t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN student_guardians sg ON sg.student_id=rs.student_id
       WHERE t.id=$1 AND t.tenant_id=$2`,
     [tripId, tenantId]
@@ -2123,6 +2146,7 @@ app.get('/api/trips/active', authMiddleware, requireRole('parent'), async (req, 
        JOIN routes r ON r.id = t.route_id
        LEFT JOIN vehicles v ON v.id=t.vehicle_id
        JOIN route_students rs ON rs.route_id = t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN students s ON s.id = rs.student_id
        JOIN student_guardians sg ON sg.student_id = s.id
        LEFT JOIN schools sc ON sc.id=s.school_id
@@ -2164,6 +2188,7 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
                       AND ta.type='approaching_5min') AS approaching_alert_sent
        FROM trips t
        JOIN route_students rs ON rs.route_id = t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN students s ON s.id = rs.student_id
        LEFT JOIN schools sc ON sc.id=s.school_id
        LEFT JOIN absences ab ON ab.student_id = s.id
@@ -2196,6 +2221,7 @@ app.get('/api/trips/:id/stops', authMiddleware, requireRole('driver', 'admin'), 
             rs.position
        FROM trips t
        JOIN route_students rs ON rs.route_id=t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN students s ON s.id=rs.student_id
        LEFT JOIN schools sc ON sc.id=s.school_id
        LEFT JOIN absences ab ON ab.student_id=s.id
@@ -2203,7 +2229,7 @@ app.get('/api/trips/:id/stops', authMiddleware, requireRole('driver', 'admin'), 
         AND ab.direction IN ('all', t.direction)
       WHERE t.id=$1 AND t.tenant_id=$2 AND ab.id IS NULL
       ORDER BY rs.position, s.name`,
-    [req.params.id, req.auth.tenantId]
+    [req.params.id, req.auth.tenantId, direction]
   );
   const homes = students.rows.map((s) => ({
     type: 'home', student_id: s.id, name: s.name, address: s.home_address,
@@ -2236,6 +2262,7 @@ app.post('/api/trips/:id/students/:studentId/emergency-return', authMiddleware, 
     `SELECT s.id, s.name
        FROM trips t
        JOIN route_students rs ON rs.route_id=t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN students s ON s.id=rs.student_id
       WHERE t.id=$1 AND s.id=$2 AND t.tenant_id=$3 AND t.status='active'
         AND ($4='admin' OR t.driver_user_id=$5)`,
@@ -2285,6 +2312,7 @@ app.post('/api/trips/:id/students/:studentId/approaching', authMiddleware, requi
     `SELECT s.name
        FROM trips t
        JOIN route_students rs ON rs.route_id=t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN students s ON s.id=rs.student_id
       WHERE t.id=$1 AND t.tenant_id=$2 AND t.status='active'
         AND s.id=$3 AND ($4='admin' OR t.driver_user_id=$5)`,
@@ -2405,6 +2433,7 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
     `SELECT s.id FROM students s
        JOIN route_students rs ON rs.student_id = s.id
        JOIN trips t ON t.route_id = rs.route_id
+        AND rs.service_direction IN ('all', t.direction)
       WHERE s.id=$1 AND s.tenant_id=$2 AND t.id=$3`,
     [student_id, req.auth.tenantId, req.params.id]
   );
@@ -2525,6 +2554,7 @@ async function parentHasStudentOnTrip(tenantId, userId, tripId) {
   const r = await db.query(
     `SELECT 1 FROM trips t
        JOIN route_students rs ON rs.route_id=t.route_id
+        AND rs.service_direction IN ('all', t.direction)
        JOIN student_guardians sg ON sg.student_id=rs.student_id
       WHERE t.id=$1 AND t.tenant_id=$2 AND sg.guardian_user_id=$3
       LIMIT 1`,
@@ -2539,6 +2569,7 @@ async function parentCanWatch(tenantId, userId, tripId) {
     `SELECT 1
        FROM trips t
       JOIN route_students rs ON rs.route_id = t.route_id
+       AND rs.service_direction IN ('all', t.direction)
       JOIN student_guardians sg ON sg.student_id = rs.student_id
       LEFT JOIN LATERAL (
         SELECT te.type FROM trip_events te
