@@ -31,6 +31,10 @@ class PushService {
   static bool _initialized = false;
 
   static Future<bool> notificationsAllowed() async {
+    final android = _local.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    final androidAllowed = await android?.areNotificationsEnabled();
+    if (androidAllowed != null) return androidAllowed;
     final settings = await FirebaseMessaging.instance.getNotificationSettings();
     return settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional;
@@ -53,7 +57,9 @@ class PushService {
     if (_initialized) return;
 
     final messaging = FirebaseMessaging.instance;
-    await requestNotificationsPermission();
+    if (!await notificationsAllowed()) {
+      await requestNotificationsPermission();
+    }
     await _local.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),

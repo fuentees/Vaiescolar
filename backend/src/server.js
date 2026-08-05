@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.20', buildNumber: 4026, releaseBuild: 26,
+      version: '1.0.21', buildNumber: 4027, releaseBuild: 27,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Cadastro do responsável por convite, compartilhamento, cancelamento e vínculo fácil de outros filhos.',
+      notes: 'Avisos de permissao aparecem somente quando a autorizacao realmente estiver pendente.',
     },
     responsavel: {
-      version: '1.0.20', buildNumber: 4026, releaseBuild: 26,
+      version: '1.0.21', buildNumber: 4027, releaseBuild: 27,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Cadastro do responsável por convite, compartilhamento, cancelamento e vínculo fácil de outros filhos.',
+      notes: 'Avisos de permissao aparecem somente quando a autorizacao realmente estiver pendente.',
     },
   };
   const version = versions[req.params.app];

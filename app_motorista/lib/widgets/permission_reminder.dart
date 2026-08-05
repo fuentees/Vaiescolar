@@ -38,17 +38,22 @@ class _PermissionReminderState extends State<PermissionReminder>
   }
 
   Future<void> _check() async {
-    var notifications = false;
+    var notifications = true;
+    var notificationPermanentlyDenied = false;
     try {
       notifications = await PushService.notificationsAllowed();
-      _notificationPermanentlyDenied =
+      notificationPermanentlyDenied =
           await PushService.notificationStatus() == AuthorizationStatus.denied;
-    } catch (_) {}
+    } catch (_) {
+      // Uma falha temporaria do Firebase nao significa que o usuario negou
+      // a permissao. Mantem o aviso oculto ate ser possivel confirmar.
+    }
     final permission = await Geolocator.checkPermission();
     final gps = await Geolocator.isLocationServiceEnabled();
     if (!mounted) return;
     setState(() {
       _notificationsAllowed = notifications;
+      _notificationPermanentlyDenied = notificationPermanentlyDenied;
       _locationAllowed = permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
       _locationPermanentlyDenied =

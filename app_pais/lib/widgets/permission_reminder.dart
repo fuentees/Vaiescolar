@@ -35,15 +35,19 @@ class _PermissionReminderState extends State<PermissionReminder>
   }
 
   Future<void> _check() async {
-    var allowed = false;
+    var allowed = true;
+    var permanentlyDenied = false;
     try {
       allowed = await PushService.notificationsAllowed();
-      _permanentlyDenied =
+      permanentlyDenied =
           await PushService.notificationStatus() == AuthorizationStatus.denied;
-    } catch (_) {}
+    } catch (_) {
+      // Nao exibe um falso aviso quando a consulta ao Firebase falha.
+    }
     if (mounted) {
       setState(() {
         _allowed = allowed;
+        _permanentlyDenied = permanentlyDenied;
         _checking = false;
       });
     }
