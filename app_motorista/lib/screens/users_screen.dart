@@ -294,12 +294,18 @@ class _NewUserDialogState extends State<_NewUserDialog> {
                 initialValue: _role,
                 items: const [
                   DropdownMenuItem(value: 'driver', child: Text('Motorista')),
-                  DropdownMenuItem(value: 'parent', child: Text('Responsavel')),
                   DropdownMenuItem(
                       value: 'admin', child: Text('Administrador')),
                 ],
                 onChanged: (v) => setState(() => _role = v!),
                 decoration: const InputDecoration(labelText: 'Tipo de conta'),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Responsaveis criam a propria conta com o convite gerado no cadastro do aluno.',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
               const SizedBox(height: 8),
               TextFormField(

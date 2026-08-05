@@ -112,13 +112,16 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                           Text('Responsaveis',
                               style: Theme.of(context).textTheme.titleMedium),
                           TextButton.icon(
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => InviteScreen(
-                                    studentId: widget.studentId,
-                                    studentName: s['name'] as String),
-                              ),
-                            ),
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => InviteScreen(
+                                      studentId: widget.studentId,
+                                      studentName: s['name'] as String),
+                                ),
+                              );
+                              if (mounted) _load();
+                            },
                             icon: const Icon(Icons.qr_code, size: 18),
                             label: const Text('Convidar'),
                           ),
@@ -163,6 +166,21 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                                 ),
                               ),
                             )),
+                      if ((s['invites'] as List? ?? [])
+                          .any((i) => i['status'] == 'pending')) ...[
+                        const SizedBox(height: 12),
+                        Text('Convites pendentes',
+                            style: Theme.of(context).textTheme.titleSmall),
+                        ...(s['invites'] as List)
+                            .where((i) => i['status'] == 'pending')
+                            .map((i) => ListTile(
+                                  dense: true,
+                                  leading:
+                                      const Icon(Icons.schedule_send_outlined),
+                                  title: Text(i['code'] as String),
+                                  subtitle: Text(i['relationship'] as String),
+                                )),
+                      ],
                       const SizedBox(height: 20),
                       Text('Pagamentos',
                           style: Theme.of(context).textTheme.titleMedium),

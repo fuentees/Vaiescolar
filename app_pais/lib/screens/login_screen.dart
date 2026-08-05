@@ -197,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
             TextButton(
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const RegisterWithCodeScreen())),
-                child: const Text('Vincular com codigo da escola')),
+                child: const Text('Criar conta com codigo de convite')),
             TextButton(
                 onPressed: _showForgotPasswordHint,
                 child: const Text('Esqueci minha senha')),

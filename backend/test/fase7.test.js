@@ -26,6 +26,12 @@ async function put(path, body, token) {
     body: JSON.stringify(body),
   });
 }
+async function del(path, token) {
+  return fetch(`${baseUrl}${path}`, {
+    method: 'DELETE',
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+}
 
 before(async () => {
   ({ app, server } = require('../src/server'));
@@ -104,6 +110,36 @@ test('GET /api/students/:id agora aceita o pai dono do aluno, mas rejeita outro 
     .then((r) => r.json()).then((r) => r.token);
   const forbidden = await get(`/api/students/${studentId}`, other);
   assert.equal(forbidden.status, 403);
+});
+
+test('conta de responsavel existente adiciona outro aluno usando a senha atual', async () => {
+  const second = await post('/api/students', { name: 'Irma do Aluno Fase7' }, adminToken).then((r) => r.json());
+  const invite = await post(`/api/students/${second.id}/invite`, { relationship: 'Pai' }, adminToken).then((r) => r.json());
+  const response = await post('/api/auth/register-parent', {
+    code: invite.code,
+    name: 'Nome ignorado',
+    email: `PAI-F7-${suffix}@TEST.LOCAL`,
+    password: 'senha123',
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.existingAccount, true);
+  assert.equal(body.studentName, 'Irma do Aluno Fase7');
+  const children = await get('/api/students/mine', body.token).then((r) => r.json());
+  assert.ok(children.some((child) => child.id === second.id));
+});
+
+test('admin lista e cancela convite pendente, que deixa de funcionar', async () => {
+  const invited = await post('/api/students', { name: 'Aluno Convite Cancelado' }, adminToken).then((r) => r.json());
+  const invite = await post(`/api/students/${invited.id}/invite`, {}, adminToken).then((r) => r.json());
+  const list = await get(`/api/students/${invited.id}/invites`, adminToken).then((r) => r.json());
+  assert.equal(list[0].status, 'pending');
+  assert.equal(await del(`/api/students/${invited.id}/invites/${invite.id}`, adminToken).then((r) => r.status), 200);
+  const registration = await post('/api/auth/register-parent', {
+    code: invite.code, name: 'Nao cadastra', email: `cancelado-${suffix}@test.local`, password: 'senha123',
+  });
+  assert.equal(registration.status, 410);
+  assert.equal((await registration.json()).error, 'codigo cancelado');
 });
 
 test('GET /api/notifications devolve o embarque pro pai', async () => {

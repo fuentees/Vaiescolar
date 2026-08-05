@@ -351,6 +351,23 @@ class Api {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  static Future<List<dynamic>> studentInvites(String studentId) async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/students/$studentId/invites'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) return [];
+    return jsonDecode(res.body) as List<dynamic>;
+  }
+
+  static Future<bool> cancelInvite(String studentId, String inviteId) async {
+    final res = await http.delete(
+      Uri.parse('${Config.apiBase}/api/students/$studentId/invites/$inviteId'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    return res.statusCode == 200;
+  }
+
   // ---------------------------------------------------------------------
   // Gestao: alunos e rotas
   // ---------------------------------------------------------------------

@@ -14,6 +14,6 @@ void main() {
     await tester.tap(find.text('Sou Passageiro/Responsável'));
     await tester.pumpAndSettle();
     expect(find.text('Acompanhe cada caminho'), findsOneWidget);
-    expect(find.text('Vincular com codigo da escola'), findsOneWidget);
+    expect(find.text('Criar conta com codigo de convite'), findsOneWidget);
   });
 }

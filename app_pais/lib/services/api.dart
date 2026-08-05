@@ -11,6 +11,8 @@ class Api {
   static String? _token;
   static String? _userId;
   static String? lastError;
+  static String? lastLinkedStudentName;
+  static bool lastLinkUsedExistingAccount = false;
 
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -176,13 +178,19 @@ class Api {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/auth/register-parent'),
       headers: {'content-type': 'application/json'},
-      body: jsonEncode(
-          {'code': code, 'name': name, 'email': email, 'password': password}),
+      body: jsonEncode({
+        'code': code,
+        'name': name,
+        'email': email.trim().toLowerCase(),
+        'password': password
+      }),
     );
     if (res.statusCode != 200) {
       return jsonDecode(res.body)['error'] as String? ?? 'erro desconhecido';
     }
     final body = jsonDecode(res.body);
+    lastLinkedStudentName = body['studentName'] as String?;
+    lastLinkUsedExistingAccount = body['existingAccount'] == true;
     await _saveSession(body['token'] as String, body['userId'] as String);
     return null;
   }
@@ -322,7 +330,11 @@ class Api {
       },
       body: jsonEncode({'code': code}),
     );
-    if (res.statusCode == 200) return null;
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      lastLinkedStudentName = body['studentName'] as String?;
+      return null;
+    }
     return jsonDecode(res.body)['error'] as String? ?? 'erro desconhecido';
   }
 

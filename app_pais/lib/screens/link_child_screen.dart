@@ -43,6 +43,23 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
     final error = await Api.linkChild(_code.text.trim());
     setState(() => _loading = false);
     if (error == null) {
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            icon: const Icon(Icons.check_circle,
+                color: AppColors.success, size: 44),
+            title: const Text('Filho adicionado!'),
+            content: Text(
+                '${Api.lastLinkedStudentName ?? 'O aluno'} foi vinculado a sua conta com sucesso.'),
+            actions: [
+              FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Concluir'))
+            ],
+          ),
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } else {
       setState(() => _error = _friendlyError(error));
@@ -57,6 +74,8 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
         return 'Esse codigo ja foi usado. Peca um novo ao motorista.';
       case 'codigo expirado':
         return 'Esse codigo expirou. Peca um novo ao motorista.';
+      case 'codigo cancelado':
+        return 'Esse convite foi cancelado. Peca um novo ao motorista.';
       default:
         return 'Nao foi possivel vincular. Tente novamente.';
     }

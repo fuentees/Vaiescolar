@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.19', buildNumber: 4025, releaseBuild: 25,
+      version: '1.0.20', buildNumber: 4026, releaseBuild: 26,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Reconexão automática, aviso offline, atualização interna com progresso, rascunhos e mensagens mais claras.',
+      notes: 'Cadastro do responsável por convite, compartilhamento, cancelamento e vínculo fácil de outros filhos.',
     },
     responsavel: {
-      version: '1.0.19', buildNumber: 4025, releaseBuild: 25,
+      version: '1.0.20', buildNumber: 4026, releaseBuild: 26,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Reconexão automática, aviso offline, atualização interna com progresso, rascunhos e mensagens mais claras.',
+      notes: 'Cadastro do responsável por convite, compartilhamento, cancelamento e vínculo fácil de outros filhos.',
     },
   };
   const version = versions[req.params.app];
@@ -409,18 +409,45 @@ app.post('/api/auth/register-parent', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(410).json({ error: 'codigo ja utilizado' });
     }
+    if (invite.cancelled_at) {
+      await client.query('ROLLBACK');
+      return res.status(410).json({ error: 'codigo cancelado' });
+    }
     if (new Date(invite.expires_at) < new Date()) {
       await client.query('ROLLBACK');
       return res.status(410).json({ error: 'codigo expirado' });
     }
 
-    const hash = await bcrypt.hash(password, 10);
-    const u = await client.query(
-      `INSERT INTO users(tenant_id, role, name, email, password_hash)
-       VALUES($1,'parent',$2,$3,$4) RETURNING id`,
-      [invite.tenant_id, name || 'Responsavel', email.trim().toLowerCase(), hash]
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await client.query(
+      'SELECT * FROM users WHERE LOWER(email)=LOWER($1) FOR UPDATE',
+      [normalizedEmail]
     );
-    const userId = u.rows[0].id;
+    let userId;
+    let tokenVersion = 0;
+    let existingAccount = false;
+    if (existing.rows.length > 0) {
+      const user = existing.rows[0];
+      if (user.role !== 'parent' || user.tenant_id !== invite.tenant_id) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'e-mail usado em outro perfil ou transportador' });
+      }
+      if (!(await bcrypt.compare(password, user.password_hash))) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'conta existente: senha incorreta' });
+      }
+      userId = user.id;
+      tokenVersion = user.token_version;
+      existingAccount = true;
+    } else {
+      const hash = await bcrypt.hash(password, 10);
+      const u = await client.query(
+        `INSERT INTO users(tenant_id, role, name, email, password_hash)
+         VALUES($1,'parent',$2,$3,$4) RETURNING id`,
+        [invite.tenant_id, name || 'Responsavel', normalizedEmail, hash]
+      );
+      userId = u.rows[0].id;
+    }
     await client.query(
       `INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id, relationship)
        VALUES($1,$2,$3,$4) ON CONFLICT (student_id, guardian_user_id)
@@ -432,8 +459,10 @@ app.post('/api/auth/register-parent', async (req, res) => {
       [userId, invite.id]
     );
     await client.query('COMMIT');
-    const token = sign({ userId, tenantId: invite.tenant_id, role: 'parent', tokenVersion: 0 });
-    res.json({ token, userId, tenantId: invite.tenant_id });
+    const student = await client.query('SELECT name FROM students WHERE id=$1', [invite.student_id]);
+    const token = sign({ userId, tenantId: invite.tenant_id, role: 'parent', tokenVersion });
+    res.json({ token, userId, tenantId: invite.tenant_id,
+      existingAccount, studentName: student.rows[0]?.name || 'Aluno' });
   } catch (e) {
     await client.query('ROLLBACK');
     if (e.code === '23505') {
@@ -474,6 +503,10 @@ app.post('/api/auth/link-child', authMiddleware, requireRole('parent'), async (r
       await client.query('ROLLBACK');
       return res.status(410).json({ error: 'codigo ja utilizado' });
     }
+    if (invite.cancelled_at) {
+      await client.query('ROLLBACK');
+      return res.status(410).json({ error: 'codigo cancelado' });
+    }
     if (new Date(invite.expires_at) < new Date()) {
       await client.query('ROLLBACK');
       return res.status(410).json({ error: 'codigo expirado' });
@@ -490,7 +523,8 @@ app.post('/api/auth/link-child', authMiddleware, requireRole('parent'), async (r
       [req.auth.userId, invite.id]
     );
     await client.query('COMMIT');
-    res.json({ ok: true });
+    const student = await client.query('SELECT name FROM students WHERE id=$1', [invite.student_id]);
+    res.json({ ok: true, studentName: student.rows[0]?.name || 'Aluno' });
   } catch (e) {
     await client.query('ROLLBACK');
     console.error('[link-child]', e);
@@ -831,7 +865,19 @@ app.get('/api/students/:id', authMiddleware, async (req, res) => {
     [req.params.id, req.auth.tenantId]
   );
 
-  res.json({ ...s.rows[0], guardians: guardians.rows, payments: payments.rows });
+  const invites = req.auth.role === 'admin' ? await db.query(
+    `SELECT id, code, relationship, expires_at, used_by_user_id, cancelled_at, created_at,
+            CASE WHEN used_by_user_id IS NOT NULL THEN 'used'
+                 WHEN cancelled_at IS NOT NULL THEN 'cancelled'
+                 WHEN expires_at < now() THEN 'expired'
+                 ELSE 'pending' END AS status
+       FROM guardian_invites
+      WHERE student_id=$1 AND tenant_id=$2
+      ORDER BY created_at DESC LIMIT 20`,
+    [req.params.id, req.auth.tenantId]
+  ) : { rows: [] };
+
+  res.json({ ...s.rows[0], guardians: guardians.rows, payments: payments.rows, invites: invites.rows });
 });
 
 /* =========================================================================
@@ -951,7 +997,7 @@ app.post('/api/students/:id/invite', authMiddleware, requireRole('admin'), async
     try {
       const r = await db.query(
         `INSERT INTO guardian_invites(tenant_id, student_id, code, relationship, expires_at)
-         VALUES($1,$2,$3,$4,$5) RETURNING code, relationship, expires_at`,
+         VALUES($1,$2,$3,$4,$5) RETURNING id, code, relationship, expires_at, created_at`,
         [req.auth.tenantId, req.params.id, code, relationship, expiresAt]
       );
       return res.json(r.rows[0]);
@@ -962,6 +1008,33 @@ app.post('/api/students/:id/invite', authMiddleware, requireRole('admin'), async
     }
   }
   res.status(500).json({ error: 'nao foi possivel gerar um codigo unico, tente novamente' });
+});
+
+app.get('/api/students/:id/invites', authMiddleware, requireRole('admin'), async (req, res) => {
+  const student = await db.query('SELECT 1 FROM students WHERE id=$1 AND tenant_id=$2',
+    [req.params.id, req.auth.tenantId]);
+  if (student.rows.length === 0) return res.status(404).json({ error: 'aluno nao encontrado' });
+  const result = await db.query(
+    `SELECT id, code, relationship, expires_at, used_by_user_id, cancelled_at, created_at,
+            CASE WHEN used_by_user_id IS NOT NULL THEN 'used'
+                 WHEN cancelled_at IS NOT NULL THEN 'cancelled'
+                 WHEN expires_at < now() THEN 'expired'
+                 ELSE 'pending' END AS status
+       FROM guardian_invites WHERE student_id=$1 AND tenant_id=$2
+      ORDER BY created_at DESC LIMIT 20`,
+    [req.params.id, req.auth.tenantId]);
+  res.json(result.rows);
+});
+
+app.delete('/api/students/:studentId/invites/:inviteId', authMiddleware, requireRole('admin'), async (req, res) => {
+  const result = await db.query(
+    `UPDATE guardian_invites SET cancelled_at=now()
+      WHERE id=$1 AND student_id=$2 AND tenant_id=$3
+        AND used_by_user_id IS NULL AND cancelled_at IS NULL AND expires_at >= now()
+      RETURNING id`,
+    [req.params.inviteId, req.params.studentId, req.auth.tenantId]);
+  if (result.rows.length === 0) return res.status(404).json({ error: 'convite pendente nao encontrado' });
+  res.json({ ok: true });
 });
 
 app.post('/api/routes', authMiddleware, requireRole('admin'), validateBody(routeBody), async (req, res) => {

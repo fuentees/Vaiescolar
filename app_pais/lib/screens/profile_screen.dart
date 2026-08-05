@@ -5,6 +5,7 @@ import '../services/remembered_login.dart';
 import '../theme.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
+import 'link_child_screen.dart';
 
 /// Mostra os dados da conta logada e permite trocar a propria senha.
 class ProfileScreen extends StatefulWidget {
@@ -233,6 +234,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.person_add_alt_1_outlined),
+                    title: const Text('Adicionar outro filho'),
+                    subtitle:
+                        const Text('Use o codigo enviado pelo transportador'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const LinkChildScreen()),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.settings_outlined),

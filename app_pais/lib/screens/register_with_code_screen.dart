@@ -51,6 +51,12 @@ class _RegisterWithCodeScreenState extends State<RegisterWithCodeScreen> {
   }
 
   Future<void> _submit() async {
+    if (_code.text.trim().length != 6 ||
+        _email.text.trim().isEmpty ||
+        _pass.text.isEmpty) {
+      setState(() => _error = 'Preencha o codigo, o e-mail e a senha.');
+      return;
+    }
     if (!_consent) {
       setState(
           () => _error = 'Aceite a politica de privacidade para continuar.');
@@ -70,6 +76,27 @@ class _RegisterWithCodeScreenState extends State<RegisterWithCodeScreen> {
     if (error == null) {
       await PushService.init();
       if (mounted) {
+        final student = Api.lastLinkedStudentName ?? 'Aluno';
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            icon: const Icon(Icons.check_circle,
+                color: AppColors.success, size: 44),
+            title: Text(Api.lastLinkUsedExistingAccount
+                ? 'Aluno adicionado!'
+                : 'Conta criada!'),
+            content: Text(Api.lastLinkUsedExistingAccount
+                ? 'Sua conta foi encontrada e $student foi adicionado com sucesso.'
+                : 'Sua conta foi criada e $student foi adicionado com sucesso.'),
+            actions: [
+              FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Continuar'))
+            ],
+          ),
+        );
+      }
+      if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const AppShell()),
         );
@@ -87,8 +114,12 @@ class _RegisterWithCodeScreenState extends State<RegisterWithCodeScreen> {
         return 'Esse codigo ja foi usado. Peca um novo ao motorista.';
       case 'codigo expirado':
         return 'Esse codigo expirou. Peca um novo ao motorista.';
-      case 'ja existe um cadastro com este e-mail':
-        return 'Ja existe uma conta com este e-mail. Faca login.';
+      case 'codigo cancelado':
+        return 'Esse convite foi cancelado. Peca um novo ao motorista.';
+      case 'conta existente: senha incorreta':
+        return 'Ja existe uma conta com este e-mail. Informe a senha atual para adicionar o aluno.';
+      case 'e-mail usado em outro perfil ou transportador':
+        return 'Este e-mail pertence a outro perfil ou transportador.';
       default:
         return 'Nao foi possivel completar o cadastro. Tente novamente.';
     }
@@ -97,13 +128,13 @@ class _RegisterWithCodeScreenState extends State<RegisterWithCodeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tenho um codigo')),
+      appBar: AppBar(title: const Text('Criar conta com convite')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(
-            'Digite o codigo de 6 caracteres que o motorista compartilhou com voce.',
+            'Digite o codigo de 6 caracteres enviado pelo transportador. Se voce ja possui conta, use o mesmo e-mail e a sua senha atual para adicionar outro filho.',
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 16),
@@ -137,7 +168,10 @@ class _RegisterWithCodeScreenState extends State<RegisterWithCodeScreen> {
           TextField(
             controller: _pass,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'Senha'),
+            decoration: const InputDecoration(
+              labelText: 'Senha',
+              helperText: 'Conta existente? Digite sua senha atual.',
+            ),
           ),
           const SizedBox(height: 12),
           CheckboxListTile(
@@ -178,7 +212,7 @@ class _RegisterWithCodeScreenState extends State<RegisterWithCodeScreen> {
             ),
           ElevatedButton(
             onPressed: _loading ? null : _submit,
-            child: Text(_loading ? '...' : 'Criar conta'),
+            child: Text(_loading ? '...' : 'Continuar'),
           ),
         ]),
       ),

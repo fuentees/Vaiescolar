@@ -122,9 +122,11 @@ CREATE TABLE IF NOT EXISTS guardian_invites (
   relationship    TEXT NOT NULL DEFAULT 'Responsavel legal',
   expires_at      TIMESTAMPTZ NOT NULL,
   used_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  cancelled_at    TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE guardian_invites ADD COLUMN IF NOT EXISTS relationship TEXT NOT NULL DEFAULT 'Responsavel legal';
+ALTER TABLE guardian_invites ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_invites_tenant ON guardian_invites(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_invites_code ON guardian_invites(code);
 
