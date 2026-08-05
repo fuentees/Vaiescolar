@@ -545,6 +545,43 @@ resetar a senha do usuario de teste, porque resetar incrementa o
 do usuario que acabou de ter a senha resetada, a chamada volta 401 (token
 invalido) em vez de 403 (sem permissao), testando a coisa errada.
 
+## Dois bugs reais encontrados testando "adicionar aluno a rota" ao vivo
+
+Reportado como "não dá erro, não dá nada e não cadastra" ao tentar vincular um
+aluno a uma rota pela UI. Reproduzido no emulador e investigado direto no log
+do backend (não so pela UI):
+
+- **`GET /api/routes/:id/students` quebrava com 500 silencioso**: a query usa
+  `$3` duas vezes (`$3::text IS NULL OR ... IN ('all', $3)`, pro filtro
+  opcional de `service_direction`), mas o array de parâmetros passado tinha
+  só 2 elementos (`[req.params.id, req.auth.tenantId]`) — faltava a variável
+  `direction` já calculada no início do handler. Postgres rejeitava com
+  `bind message supplies 2 parameters, but prepared statement requires 3`.
+  O efeito prático era enganoso: `POST /api/routes/:id/students` (o vinculo
+  em si) **funcionava perfeitamente** — o aluno era mesmo inserido em
+  `route_students` — só que a tela recarrega a lista logo em seguida
+  chamando esse GET quebrado, que devolvia erro, e o app (sem tratamento de
+  erro nesse fluxo especifico) só re-renderizava a lista vazia. Resultado:
+  o cadastro **acontecia de verdade no banco**, mas parecia que "não dava
+  nada" porque a confirmação visual falhava silenciosamente. Corrigido
+  passando `direction` como terceiro parâmetro.
+- **Badge de não lidas não zerava ao abrir uma conversa** (achado
+  investigando o primeiro bug, não relacionado a ele): `GET
+  /api/chat/:parentUserId` fazia o `UPDATE`/`INSERT` em `chat_reads`
+  (marcar como lido) como fire-and-forget (`db.query(...).catch(...)` sem
+  `await`) antes de responder — a resposta HTTP saía pro cliente antes do
+  `INSERT` terminar de verdade contra o Postgres (round-trip de rede real,
+  mais lento que devolver a resposta local). Uma chamada seguinte a
+  `/api/chat/unread-count` podia ainda ver o estado antigo. Corrigido
+  aguardando (`await`) esse `INSERT` antes de responder — é a própria ação
+  do request ("abrir a thread marca como lida"), não um efeito colateral
+  secundário como um push, então não faz sentido não esperar por ele.
+
+Ambos so apareceram testando o fluxo completo no emulador contra o backend
+local — nenhum teste de integração cobria `GET /api/routes/:id/students`
+antes disso. `npm test` (42 testes) e `flutter analyze` (os dois apps)
+limpos depois da correção.
+
 ## Dependencias — nota de seguranca
 `firebase-admin` foi atualizado para a v14.2.0 (`npm audit fix --force`),
 reduzindo de 8 para 6 vulnerabilidades moderadas transitivas (`google-gax`/

@@ -653,7 +653,13 @@ app.get('/api/chat/:parentUserId', authMiddleware, async (req, res) => {
       ORDER BY created_at ASC`,
     [req.auth.tenantId, parentUserId]
   );
-  db.query(
+  // Precisa ser aguardado antes de responder -- e a propria acao de "abrir a
+  // thread marca como lida", nao um efeito colateral secundario (como um
+  // push). Antes rodava fire-and-forget e a resposta podia chegar ao cliente
+  // antes do UPDATE terminar, fazendo a proxima chamada a /unread-count
+  // ainda contar a mensagem como nao lida (race condition real, pega pelo
+  // teste de integracao, nao por uso manual).
+  await db.query(
     `INSERT INTO chat_reads(tenant_id, user_id, parent_user_id, last_read_at)
      VALUES($1,$2,$3,now())
      ON CONFLICT (user_id, parent_user_id) DO UPDATE SET last_read_at = now()`,
@@ -1223,7 +1229,7 @@ app.get('/api/routes/:id/students', authMiddleware, requireRole('driver', 'admin
       WHERE rs.route_id = $1 AND rs.tenant_id = $2
         AND ($3::text IS NULL OR rs.service_direction IN ('all', $3))
       ORDER BY rs.position, s.name`,
-    [req.params.id, req.auth.tenantId]
+    [req.params.id, req.auth.tenantId, direction]
   );
   res.json(r.rows);
 });
