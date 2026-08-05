@@ -8,6 +8,7 @@ import 'chat_threads_screen.dart';
 import 'home_screen.dart';
 import 'management_hub_screen.dart';
 import '../widgets/permission_reminder.dart';
+import 'package:app_pais/widgets/connectivity_banner.dart';
 
 class _NavTab {
   final String label;
@@ -63,7 +64,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refreshUnread();
+    if (state == AppLifecycleState.resumed) {
+      _refreshUnread();
+      UpdateService.check(context);
+    }
   }
 
   Future<void> _refreshUnread() async {
@@ -122,6 +126,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       child: Scaffold(
         body: Column(
           children: [
+            const ConnectivityBanner(),
             const PermissionReminder(),
             Expanded(
                 child: IndexedStack(

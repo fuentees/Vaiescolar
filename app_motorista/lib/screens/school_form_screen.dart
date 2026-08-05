@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import '../services/api.dart';
 import '../services/postal_code_service.dart';
+import '../services/form_draft.dart';
 import '../theme.dart';
 import '../utils/phone_mask.dart';
 
@@ -30,6 +32,7 @@ class _SchoolFormScreenState extends State<SchoolFormScreen> {
   bool _saving = false;
   String? _error;
   String? _lastCep;
+  Timer? _draftTimer;
 
   bool get _editing => widget.existing != null;
   String? _value(TextEditingController c) =>
@@ -51,10 +54,61 @@ class _SchoolFormScreenState extends State<SchoolFormScreen> {
     _city = TextEditingController(text: e?['city'] as String? ?? '');
     _state = TextEditingController(text: e?['state'] as String? ?? '');
     _phone = TextEditingController(text: e?['phone'] as String? ?? '');
+    if (!_editing) {
+      for (final c in [
+        _name,
+        _cep,
+        _street,
+        _number,
+        _complement,
+        _neighborhood,
+        _city,
+        _state,
+        _phone
+      ]) {
+        c.addListener(_changed);
+      }
+      _restoreDraft();
+    }
+  }
+
+  void _changed() {
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 600), () {
+      FormDraft.write('school_new', {
+        'name': _name.text,
+        'cep': _cep.text,
+        'street': _street.text,
+        'number': _number.text,
+        'complement': _complement.text,
+        'neighborhood': _neighborhood.text,
+        'city': _city.text,
+        'state': _state.text,
+        'phone': _phone.text,
+      });
+    });
+  }
+
+  Future<void> _restoreDraft() async {
+    final d = await FormDraft.read('school_new');
+    if (!mounted || d == null) return;
+    _name.text = d['name'] as String? ?? '';
+    _cep.text = d['cep'] as String? ?? '';
+    _street.text = d['street'] as String? ?? '';
+    _number.text = d['number'] as String? ?? '';
+    _complement.text = d['complement'] as String? ?? '';
+    _neighborhood.text = d['neighborhood'] as String? ?? '';
+    _city.text = d['city'] as String? ?? '';
+    _state.text = d['state'] as String? ?? '';
+    _phone.text = d['phone'] as String? ?? '';
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Rascunho da escola restaurado.')),
+    );
   }
 
   @override
   void dispose() {
+    _draftTimer?.cancel();
     for (final c in [
       _name,
       _cep,
@@ -110,6 +164,7 @@ class _SchoolFormScreenState extends State<SchoolFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _saving = true;
@@ -171,6 +226,8 @@ class _SchoolFormScreenState extends State<SchoolFormScreen> {
             lng: lng);
     if (!mounted) return;
     if (ok) {
+      if (!_editing) await FormDraft.delete('school_new');
+      if (!mounted) return;
       Navigator.pop(context, true);
     } else {
       setState(() {

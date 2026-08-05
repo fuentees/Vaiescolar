@@ -26,6 +26,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final students = await Api.students();
+    if (!mounted) return;
     setState(() {
       _students = students;
       _loading = false;
@@ -59,8 +60,15 @@ class _StudentsScreenState extends State<StudentsScreen> {
       ),
     );
     if (confirmed == true) {
-      await Api.deleteStudent(student['id'] as String);
-      _load();
+      final deleted = await Api.deleteStudent(student['id'] as String);
+      if (!mounted) return;
+      if (deleted) {
+        _load();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível excluir o aluno. Tente novamente.'),
+        ));
+      }
     }
   }
 
@@ -68,7 +76,9 @@ class _StudentsScreenState extends State<StudentsScreen> {
   Widget build(BuildContext context) {
     final visible = _students.where((item) {
       final student = item as Map<String, dynamic>;
-      final text = '${student['name']} ${student['school_display_name'] ?? student['school_name'] ?? ''}'.toLowerCase();
+      final text =
+          '${student['name']} ${student['school_display_name'] ?? student['school_name'] ?? ''}'
+              .toLowerCase();
       return text.contains(_query.trim().toLowerCase());
     }).toList()
       ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));

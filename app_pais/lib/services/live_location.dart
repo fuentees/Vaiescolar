@@ -38,6 +38,11 @@ class LiveLocation {
   /// indicador online/offline (o WS pode cair sem o app perceber de outra
   /// forma, ja que os pings de GPS sao esporadicos).
   final ValueNotifier<bool> connected = ValueNotifier(false);
+  Timer? _retryTimer;
+  String? _token;
+  String? _tripId;
+  bool _disposed = false;
+  int _attempt = 0;
 
   Stream<LivePosition> get stream => _positionController.stream;
   Stream<TripEvent> get events => _eventController.stream;
@@ -45,15 +50,25 @@ class LiveLocation {
   Stream<ApproachingAlert> get approaching => _approachingController.stream;
 
   void connect({required String token, required String tripId}) {
-    final uri = Uri.parse('${Config.wsBase}/ws?tripId=$tripId');
+    _token = token;
+    _tripId = tripId;
+    _open();
+  }
+
+  void _open() {
+    if (_disposed || _token == null || _tripId == null) return;
+    _retryTimer?.cancel();
+    _channel?.sink.close();
+    final uri = Uri.parse('${Config.wsBase}/ws?tripId=$_tripId');
     _channel = IOWebSocketChannel.connect(
       uri,
-      headers: {'Authorization': 'Bearer $token'},
+      headers: {'Authorization': 'Bearer $_token'},
     );
-    _channel!.ready.then((_) {
+    _channel!.ready.then<void>((_) {
       connected.value = true;
-    }).catchError((_) {
-      connected.value = false;
+      _attempt = 0;
+    }, onError: (Object _, StackTrace __) {
+      _disconnected();
     });
     _channel!.stream.listen((raw) {
       final msg = jsonDecode(raw as String);
@@ -86,13 +101,24 @@ class LiveLocation {
         _finishedController.add(null);
       }
     }, onError: (_) {
-      connected.value = false;
+      _disconnected();
     }, onDone: () {
-      connected.value = false;
+      _disconnected();
     });
   }
 
+  void _disconnected() {
+    if (_disposed) return;
+    connected.value = false;
+    if (_retryTimer?.isActive == true) return;
+    final seconds = [2, 4, 8, 15, 30][_attempt.clamp(0, 4)];
+    _attempt++;
+    _retryTimer = Timer(Duration(seconds: seconds), _open);
+  }
+
   void dispose() {
+    _disposed = true;
+    _retryTimer?.cancel();
     _channel?.sink.close();
     _positionController.close();
     _eventController.close();

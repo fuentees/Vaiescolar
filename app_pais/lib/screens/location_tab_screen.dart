@@ -26,6 +26,7 @@ class _LocationTabScreenState extends State<LocationTabScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final rows = await Api.activeTrips();
+    if (!mounted) return;
     if (rows.isEmpty) {
       setState(() {
         _mostRecentTrip = null;
@@ -44,6 +45,7 @@ class _LocationTabScreenState extends State<LocationTabScreen> {
       ..sort((a, b) => (b.first['started_at'] as String)
           .compareTo(a.first['started_at'] as String));
     final mostRecent = trips.first;
+    if (!mounted) return;
     setState(() {
       _mostRecentTrip = mostRecent.first;
       _studentNames = {

@@ -93,8 +93,11 @@ class _UsersScreenState extends State<UsersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = _users.where((u) => '${u['name']} ${u['email']} ${u['phone'] ?? ''}'
-        .toLowerCase().contains(_query.trim().toLowerCase())).toList();
+    final visible = _users
+        .where((u) => '${u['name']} ${u['email']} ${u['phone'] ?? ''}'
+            .toLowerCase()
+            .contains(_query.trim().toLowerCase()))
+        .toList();
     final admins = visible.where((u) => u['role'] == 'admin').toList();
     final drivers = visible.where((u) => u['role'] == 'driver').toList();
     final parents = visible.where((u) => u['role'] == 'parent').toList();
@@ -108,13 +111,20 @@ class _UsersScreenState extends State<UsersScreen> {
         );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Equipe e responsáveis'), bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(64),
-        child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: TextField(
-          onChanged: (value) => setState(() => _query = value),
-          decoration: const InputDecoration(hintText: 'Buscar nome, e-mail ou telefone...', prefixIcon: Icon(Icons.search), isDense: true),
-        )),
-      )),
+      appBar: AppBar(
+          title: const Text('Equipe e responsáveis'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(64),
+            child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: TextField(
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                      hintText: 'Buscar nome, e-mail ou telefone...',
+                      prefixIcon: Icon(Icons.search),
+                      isDense: true),
+                )),
+          )),
       floatingActionButton: FloatingActionButton(
         onPressed: _openAddDialog,
         child: const Icon(Icons.person_add),
@@ -337,8 +347,12 @@ class _NewUserDialogState extends State<_NewUserDialog> {
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
-                validator: (v) =>
-                    (v == null || v.length < 6) ? 'Minimo 6 caracteres' : null,
+                validator: (v) => v == null ||
+                        v.length < 8 ||
+                        !RegExp(r'[A-Za-z]').hasMatch(v) ||
+                        !RegExp(r'\d').hasMatch(v)
+                    ? 'Mínimo 8 caracteres, com letras e números'
+                    : null,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
               if (_error != null) ...[
@@ -520,7 +534,7 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
           controller: _passCtrl,
           obscureText: _obscure,
           decoration: InputDecoration(
-            labelText: 'Nova senha (min. 6 caracteres)',
+            labelText: 'Nova senha (mín. 8 caracteres, letras e números)',
             suffixIcon: IconButton(
               icon: Icon(_obscure
                   ? Icons.visibility_outlined
@@ -529,8 +543,12 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
             ),
             errorText: _error,
           ),
-          validator: (v) =>
-              (v == null || v.length < 6) ? 'Minimo 6 caracteres' : null,
+          validator: (v) => v == null ||
+                  v.length < 8 ||
+                  !RegExp(r'[A-Za-z]').hasMatch(v) ||
+                  !RegExp(r'\d').hasMatch(v)
+              ? 'Mínimo 8 caracteres, com letras e números'
+              : null,
           autovalidateMode: AutovalidateMode.onUserInteraction,
         ),
       ),

@@ -68,6 +68,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _socket.dispose();
       _socket = ChatSocket();
       _connectSocket();
+      setState(() {});
       _load();
     }
   }
@@ -75,6 +76,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _load({bool silent = false}) async {
     if (!silent) setState(() => _loading = true);
     final history = await Api.chatMessages(widget.parentUserId);
+    if (!mounted) return;
     setState(() {
       _messages
         ..clear()
@@ -112,6 +114,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     setState(() => _messages.add(msg));
     _scrollToBottom();
     final ok = await Api.sendChatMessage(widget.parentUserId, text);
+    if (!mounted) return;
     setState(() {
       msg.status = ok ? _MsgStatus.sent : _MsgStatus.failed;
       _sending = false;
@@ -121,6 +124,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _retry(_Msg msg) async {
     setState(() => msg.status = _MsgStatus.sending);
     final ok = await Api.sendChatMessage(widget.parentUserId, msg.body);
+    if (!mounted) return;
     setState(() => msg.status = ok ? _MsgStatus.sent : _MsgStatus.failed);
   }
 
@@ -164,6 +168,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ),
       body: Column(
         children: [
+          ValueListenableBuilder<bool>(
+            valueListenable: _socket.connected,
+            builder: (context, connected, _) => Container(
+              width: double.infinity,
+              color: connected
+                  ? AppColors.success.withValues(alpha: .12)
+                  : Theme.of(context).colorScheme.errorContainer,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                connected ? 'Conectado' : 'Reconectando…',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+          ),
           Container(
             width: double.infinity,
             color: Theme.of(context).colorScheme.surfaceContainerHighest,

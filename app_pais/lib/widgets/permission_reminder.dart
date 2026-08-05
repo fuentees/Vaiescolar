@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/push_service.dart';
 
 class PermissionReminder extends StatefulWidget {
@@ -13,6 +14,7 @@ class _PermissionReminderState extends State<PermissionReminder>
     with WidgetsBindingObserver {
   bool _allowed = true;
   bool _checking = true;
+  bool _permanentlyDenied = false;
 
   @override
   void initState() {
@@ -36,6 +38,8 @@ class _PermissionReminderState extends State<PermissionReminder>
     var allowed = false;
     try {
       allowed = await PushService.notificationsAllowed();
+      _permanentlyDenied =
+          await PushService.notificationStatus() == AuthorizationStatus.denied;
     } catch (_) {}
     if (mounted) {
       setState(() {
@@ -69,7 +73,8 @@ class _PermissionReminderState extends State<PermissionReminder>
                 child: Text(
               'Ative as notificações para receber embarques, chegadas e avisos.',
             )),
-            TextButton(onPressed: _request, child: const Text('Permitir')),
+            if (!_permanentlyDenied)
+              TextButton(onPressed: _request, child: const Text('Permitir')),
             const IconButton(
               tooltip: 'Abrir configurações',
               onPressed: Geolocator.openAppSettings,

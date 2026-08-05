@@ -274,7 +274,9 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
     final name = widget.studentNames[e.studentId] ?? 'Aluno';
     final action = e.type == 'emergency_return'
         ? 'retorno de emergência para casa'
-        : e.type == 'boarded' ? 'embarcou' : 'chegou / desceu';
+        : e.type == 'boarded'
+            ? 'embarcou'
+            : 'chegou / desceu';
     setState(() {
       _statusText = '$name $action';
       _statusAt = DateTime.now();
@@ -404,68 +406,69 @@ class _ParentMapState extends State<ParentMap> with WidgetsBindingObserver {
             top: false,
             minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: Card(
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: const BoxDecoration(
-                      color: AppColors.accent,
-                      shape: BoxShape.circle,
+              margin: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: AppColors.accent,
+                        shape: BoxShape.circle,
+                      ),
+                      child:
+                          const Icon(Icons.directions_bus, color: Colors.white),
                     ),
-                    child:
-                        const Icon(Icons.directions_bus, color: Colors.white),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(studentLabel,
-                            style: Theme.of(context).textTheme.titleMedium),
-                        if (!_studentOnBoard)
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(studentLabel,
+                              style: Theme.of(context).textTheme.titleMedium),
+                          if (!_studentOnBoard)
+                            Text(
+                              widget.routeName != null
+                                  ? '${widget.routeName} · $direcaoLabel'
+                                  : direcaoLabel,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           Text(
-                            widget.routeName != null
-                                ? '${widget.routeName} · $direcaoLabel'
-                                : direcaoLabel,
+                            '$_statusText · atualizado ${_timeLabel(_statusAt)}',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
-                        Text(
-                          '$_statusText · atualizado ${_timeLabel(_statusAt)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (_isStale && !_tripFinished) ...[
-                          const SizedBox(height: 4),
-                          Row(children: [
-                            const Icon(Icons.warning_amber,
-                                size: 14, color: AppColors.accent),
-                            const SizedBox(width: 4),
-                            Text(
-                              'GPS desatualizado ha ${DateTime.now().difference(_statusAt!).inMinutes} min',
-                              style: const TextStyle(
-                                  color: AppColors.accent, fontSize: 12),
-                            ),
-                          ]),
+                          if (_isStale && !_tripFinished) ...[
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              const Icon(Icons.warning_amber,
+                                  size: 14, color: AppColors.accent),
+                              const SizedBox(width: 4),
+                              Text(
+                                'GPS desatualizado ha ${DateTime.now().difference(_statusAt!).inMinutes} min',
+                                style: const TextStyle(
+                                    color: AppColors.accent, fontSize: 12),
+                              ),
+                            ]),
+                          ],
+                          // Resumo textual do status, pra quem usa leitor de tela e nao
+                          // consegue ler o mapa em si.
+                          Semantics(
+                            label:
+                                'Status: $_statusText, atualizado ${_timeLabel(_statusAt)}'
+                                '${_isStale ? ", GPS desatualizado" : ""}',
+                            child: const SizedBox.shrink(),
+                          ),
                         ],
-                        // Resumo textual do status, pra quem usa leitor de tela e nao
-                        // consegue ler o mapa em si.
-                        Semantics(
-                          label:
-                              'Status: $_statusText, atualizado ${_timeLabel(_statusAt)}'
-                              '${_isStale ? ", GPS desatualizado" : ""}',
-                          child: const SizedBox.shrink(),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           ),
         ],
       ),

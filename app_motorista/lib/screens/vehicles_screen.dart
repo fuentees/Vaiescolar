@@ -65,17 +65,27 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = _vehicles.where((v) => '${v['plate']} ${v['model'] ?? ''}'
-        .toLowerCase().contains(_query.trim().toLowerCase())).toList()
+    final visible = _vehicles
+        .where((v) => '${v['plate']} ${v['model'] ?? ''}'
+            .toLowerCase()
+            .contains(_query.trim().toLowerCase()))
+        .toList()
       ..sort((a, b) => (a['plate'] as String).compareTo(b['plate'] as String));
     return Scaffold(
-      appBar: AppBar(title: const Text('Veículos'), bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(64),
-        child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: TextField(
-          onChanged: (value) => setState(() => _query = value),
-          decoration: const InputDecoration(hintText: 'Buscar placa ou modelo...', prefixIcon: Icon(Icons.search), isDense: true),
-        )),
-      )),
+      appBar: AppBar(
+          title: const Text('Veículos'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(64),
+            child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: TextField(
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                      hintText: 'Buscar placa ou modelo...',
+                      prefixIcon: Icon(Icons.search),
+                      isDense: true),
+                )),
+          )),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
         child: const Icon(Icons.add),

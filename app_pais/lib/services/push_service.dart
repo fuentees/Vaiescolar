@@ -36,6 +36,10 @@ class PushService {
         settings.authorizationStatus == AuthorizationStatus.provisional;
   }
 
+  static Future<AuthorizationStatus> notificationStatus() async =>
+      (await FirebaseMessaging.instance.getNotificationSettings())
+          .authorizationStatus;
+
   static Future<bool> requestNotificationsPermission() async {
     final android = _local.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();

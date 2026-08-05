@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import '../services/api.dart';
 import '../services/postal_code_service.dart';
+import '../services/form_draft.dart';
 import '../theme.dart';
 import '../utils/phone_mask.dart';
 import 'school_form_screen.dart';
@@ -49,6 +51,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
   bool _lookingUpPostalCode = false;
   String? _postalCodeError;
   String? _lastPostalCode;
+  Timer? _draftTimer;
 
   bool get _isEditing => widget.existing != null;
 
@@ -107,10 +110,72 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
       _authorizedPickupCtrl,
       _photoUrlCtrl,
     ]) {
-      c.addListener(() => _dirty = true);
+      c.addListener(_changed);
     }
 
     _loadSchools();
+    if (!_isEditing) _restoreDraft();
+  }
+
+  void _changed() {
+    _dirty = true;
+    if (_isEditing) return;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 600), _saveDraft);
+  }
+
+  Future<void> _saveDraft() => FormDraft.write('student_new', {
+        'name': _nameCtrl.text,
+        'address': _addressCtrl.text,
+        'postalCode': _postalCodeCtrl.text,
+        'number': _numberCtrl.text,
+        'complement': _complementCtrl.text,
+        'neighborhood': _neighborhoodCtrl.text,
+        'city': _cityCtrl.text,
+        'state': _stateCtrl.text,
+        'fee': _feeCtrl.text,
+        'classPeriod': _classPeriodCtrl.text,
+        'emergencyName': _emergencyNameCtrl.text,
+        'emergencyPhone': _emergencyPhoneCtrl.text,
+        'medicalNotes': _medicalNotesCtrl.text,
+        'authorizedPickup': _authorizedPickupCtrl.text,
+        'photoUrl': _photoUrlCtrl.text,
+        'schoolId': _schoolId,
+        'birthDate': _birthDate?.toIso8601String(),
+        'active': _active,
+      });
+
+  Future<void> _restoreDraft() async {
+    final d = await FormDraft.read('student_new');
+    if (!mounted || d == null) return;
+    void set(TextEditingController c, String key) {
+      c.text = d[key] as String? ?? '';
+    }
+
+    set(_nameCtrl, 'name');
+    set(_addressCtrl, 'address');
+    set(_postalCodeCtrl, 'postalCode');
+    set(_numberCtrl, 'number');
+    set(_complementCtrl, 'complement');
+    set(_neighborhoodCtrl, 'neighborhood');
+    set(_cityCtrl, 'city');
+    set(_stateCtrl, 'state');
+    set(_feeCtrl, 'fee');
+    set(_classPeriodCtrl, 'classPeriod');
+    set(_emergencyNameCtrl, 'emergencyName');
+    set(_emergencyPhoneCtrl, 'emergencyPhone');
+    set(_medicalNotesCtrl, 'medicalNotes');
+    set(_authorizedPickupCtrl, 'authorizedPickup');
+    set(_photoUrlCtrl, 'photoUrl');
+    setState(() {
+      _schoolId = d['schoolId'] as String?;
+      _birthDate = DateTime.tryParse(d['birthDate'] as String? ?? '');
+      _active = d['active'] as bool? ?? true;
+      _dirty = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Rascunho do aluno restaurado.')),
+    );
   }
 
   Future<void> _loadSchools() async {
@@ -121,6 +186,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
 
   @override
   void dispose() {
+    _draftTimer?.cancel();
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     _postalCodeCtrl.dispose();
@@ -217,6 +283,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _saving = true;
@@ -343,6 +410,8 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
     }
     if (!mounted) return;
     if (ok) {
+      if (!_isEditing) await FormDraft.delete('student_new');
+      if (!mounted) return;
       _dirty = false;
       Navigator.pop(context, true);
     } else {
@@ -385,7 +454,10 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
         if (didPop) return;
         final navigator = Navigator.of(context);
         final discard = await _confirmDiscard();
-        if (discard) navigator.pop(false);
+        if (discard) {
+          if (!_isEditing) await FormDraft.delete('student_new');
+          navigator.pop(false);
+        }
       },
       child: Scaffold(
         appBar: AppBar(title: Text(_isEditing ? 'Editar aluno' : 'Novo aluno')),

@@ -50,7 +50,8 @@ class _SchoolsScreenState extends State<SchoolsScreen> {
     final visible = _schools.where((item) {
       final school = item as Map<String, dynamic>;
       return '${school['name']} ${school['address'] ?? ''}'
-          .toLowerCase().contains(_query.trim().toLowerCase());
+          .toLowerCase()
+          .contains(_query.trim().toLowerCase());
     }).toList()
       ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
     return Scaffold(

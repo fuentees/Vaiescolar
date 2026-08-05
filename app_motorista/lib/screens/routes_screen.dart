@@ -25,6 +25,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final routes = await Api.routes();
+    if (!mounted) return;
     setState(() {
       _routes = routes;
       _loading = false;
@@ -57,24 +58,41 @@ class _RoutesScreenState extends State<RoutesScreen> {
       ),
     );
     if (confirmed == true) {
-      await Api.deleteRoute(route['id'] as String);
-      _load();
+      final deleted = await Api.deleteRoute(route['id'] as String);
+      if (!mounted) return;
+      if (deleted) {
+        _load();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível excluir a rota. Tente novamente.'),
+        ));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final visible = _routes.where((r) => (r['name'] as String)
-        .toLowerCase().contains(_query.trim().toLowerCase())).toList()
+    final visible = _routes
+        .where((r) => (r['name'] as String)
+            .toLowerCase()
+            .contains(_query.trim().toLowerCase()))
+        .toList()
       ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
     return Scaffold(
-      appBar: AppBar(title: const Text('Rotas'), bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(64),
-        child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: TextField(
-          onChanged: (value) => setState(() => _query = value),
-          decoration: const InputDecoration(hintText: 'Buscar rota...', prefixIcon: Icon(Icons.search), isDense: true),
-        )),
-      )),
+      appBar: AppBar(
+          title: const Text('Rotas'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(64),
+            child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: TextField(
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                      hintText: 'Buscar rota...',
+                      prefixIcon: Icon(Icons.search),
+                      isDense: true),
+                )),
+          )),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
         child: const Icon(Icons.add),

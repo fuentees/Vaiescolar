@@ -70,9 +70,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (currentCtrl.text.isEmpty ||
-                    newCtrl.text.trim().length < 6) {
+                    newCtrl.text.trim().length < 8 ||
+                    !RegExp(r'[A-Za-z]').hasMatch(newCtrl.text) ||
+                    !RegExp(r'\d').hasMatch(newCtrl.text)) {
                   setDialogState(() => error =
-                      'Preencha a senha atual e uma nova com ao menos 6 caracteres.');
+                      'A nova senha deve ter ao menos 8 caracteres, letras e números.');
                   return;
                 }
                 final err = await Api.changePassword(
@@ -102,7 +104,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Sair da conta?'),
-        content: const Text('Você pode manter o login salvo para entrar mais rápido depois.'),
+        content: const Text(
+            'Você pode manter o login salvo para entrar mais rápido depois.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
@@ -138,18 +141,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Seus vínculos, mensagens e acesso serão removidos. Esta ação não pode ser desfeita.'),
+              const Text(
+                  'Seus vínculos, mensagens e acesso serão removidos. Esta ação não pode ser desfeita.'),
               const SizedBox(height: 12),
               TextField(
                 controller: password,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Confirme sua senha'),
+                decoration:
+                    const InputDecoration(labelText: 'Confirme sua senha'),
               ),
-              if (error != null) Text(error!, style: const TextStyle(color: AppColors.error)),
+              if (error != null)
+                Text(error!, style: const TextStyle(color: AppColors.error)),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar')),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: AppColors.error),
               onPressed: () async {
@@ -172,7 +180,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await HostActions.switchProfile?.call();
       } else {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (_) => false);
       }
     }
   }

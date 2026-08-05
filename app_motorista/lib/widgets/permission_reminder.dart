@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/push_service.dart';
 
 class PermissionReminder extends StatefulWidget {
@@ -15,6 +16,8 @@ class _PermissionReminderState extends State<PermissionReminder>
   bool _locationAllowed = true;
   bool _gpsEnabled = true;
   bool _checking = true;
+  bool _notificationPermanentlyDenied = false;
+  bool _locationPermanentlyDenied = false;
 
   @override
   void initState() {
@@ -38,6 +41,8 @@ class _PermissionReminderState extends State<PermissionReminder>
     var notifications = false;
     try {
       notifications = await PushService.notificationsAllowed();
+      _notificationPermanentlyDenied =
+          await PushService.notificationStatus() == AuthorizationStatus.denied;
     } catch (_) {}
     final permission = await Geolocator.checkPermission();
     final gps = await Geolocator.isLocationServiceEnabled();
@@ -46,6 +51,8 @@ class _PermissionReminderState extends State<PermissionReminder>
       _notificationsAllowed = notifications;
       _locationAllowed = permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
+      _locationPermanentlyDenied =
+          permission == LocationPermission.deniedForever;
       _gpsEnabled = gps;
       _checking = false;
     });
@@ -86,7 +93,8 @@ class _PermissionReminderState extends State<PermissionReminder>
                 child: Text(
               'Ative $missing para rastrear a rota e receber avisos.',
             )),
-            TextButton(onPressed: _request, child: const Text('Permitir')),
+            if (!_notificationPermanentlyDenied && !_locationPermanentlyDenied)
+              TextButton(onPressed: _request, child: const Text('Permitir')),
             IconButton(
               tooltip: 'Abrir configurações',
               onPressed: _gpsEnabled

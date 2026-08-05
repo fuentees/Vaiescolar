@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.18', buildNumber: 4024, releaseBuild: 24,
+      version: '1.0.19', buildNumber: 4025, releaseBuild: 25,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Login mais claro, permissões persistentes, botão Voltar sem desconectar e melhorias de segurança.',
+      notes: 'Reconexão automática, aviso offline, atualização interna com progresso, rascunhos e mensagens mais claras.',
     },
     responsavel: {
-      version: '1.0.18', buildNumber: 4024, releaseBuild: 24,
+      version: '1.0.19', buildNumber: 4025, releaseBuild: 25,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Login mais claro, permissões persistentes, botão Voltar sem desconectar e melhorias de segurança.',
+      notes: 'Reconexão automática, aviso offline, atualização interna com progresso, rascunhos e mensagens mais claras.',
     },
   };
   const version = versions[req.params.app];
