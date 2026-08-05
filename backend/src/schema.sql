@@ -202,6 +202,9 @@ CREATE TABLE IF NOT EXISTS locations (
   recorded_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_locations_trip ON locations(trip_id, recorded_at);
+-- Retencao aplicada em POST /api/trips/:id/locations (30 dias por padrao,
+-- configuravel por GPS_RETENTION_DAYS). Este indice mantem a limpeza barata.
+CREATE INDEX IF NOT EXISTS idx_locations_recorded_at ON locations(recorded_at);
 
 -- Ultima posicao conhecida por viagem (leitura rapida O(1)).
 CREATE TABLE IF NOT EXISTS trip_last_location (

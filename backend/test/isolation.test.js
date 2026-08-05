@@ -134,14 +134,18 @@ test('WebSocket autoriza somente responsavel vinculado e transmite localizacao',
   const wsBase = baseUrl.replace('http://', 'ws://');
 
   const deniedStatus = await new Promise((resolve, reject) => {
-    const denied = new WebSocket(`${wsBase}/?tripId=${tripId}&token=${unrelatedParentToken}`);
+    const denied = new WebSocket(`${wsBase}/?tripId=${tripId}`, {
+      headers: { authorization: `Bearer ${unrelatedParentToken}` },
+    });
     denied.once('unexpected-response', (_request, response) => resolve(response.statusCode));
     denied.once('open', () => reject(new Error('responsavel sem vinculo conectou')));
     denied.once('error', () => {});
   });
   assert.equal(deniedStatus, 403);
 
-  const socket = new WebSocket(`${wsBase}/?tripId=${tripId}&token=${parentToken}`);
+  const socket = new WebSocket(`${wsBase}/?tripId=${tripId}`, {
+    headers: { authorization: `Bearer ${parentToken}` },
+  });
   const subscribed = await new Promise((resolve, reject) => {
     socket.once('message', (data) => resolve(JSON.parse(data.toString())));
     socket.once('error', reject);
@@ -189,8 +193,70 @@ test('GET /api/trips/:id/location exige o responsavel ter filho vinculado aquela
   await post(`/api/trips/${trip.tripId}/finish`, {}, driverToken);
 });
 
+test('responsavel perde acesso ao GPS assim que o proprio filho desembarca', async () => {
+  const trip = await post('/api/trips/start', { route_id: routeId, direction: 'to_school' }, driverToken).then((r) => r.json());
+  await post(`/api/trips/${trip.tripId}/events`, { student_id: studentId, type: 'boarded' }, driverToken);
+  await post(`/api/trips/${trip.tripId}/events`, { student_id: studentId, type: 'dropped' }, driverToken);
+
+  const location = await get(`/api/trips/${trip.tripId}/location`, parentToken);
+  assert.equal(location.status, 403);
+
+  const wsBase = baseUrl.replace('http://', 'ws://');
+  const deniedStatus = await new Promise((resolve, reject) => {
+    const denied = new WebSocket(`${wsBase}/?tripId=${trip.tripId}`, {
+      headers: { authorization: `Bearer ${parentToken}` },
+    });
+    denied.once('unexpected-response', (_request, response) => resolve(response.statusCode));
+    denied.once('open', () => reject(new Error('responsavel continuou rastreando depois do desembarque')));
+    denied.once('error', () => {});
+  });
+  assert.equal(deniedStatus, 403);
+  await post(`/api/trips/${trip.tripId}/finish`, {}, driverToken);
+});
+
+test('timeline do responsavel contem somente eventos dos proprios filhos', async () => {
+  const otherStudent = await post('/api/students', { name: 'Outro Aluno Da Rota' }, adminToken).then((r) => r.json());
+  await post(`/api/routes/${routeId}/students`, { student_id: otherStudent.id }, adminToken);
+  const otherParentId = (await db.query(
+    'SELECT id FROM users WHERE email=$1', [`parent2-${suffix}@test.local`]
+  )).rows[0].id;
+  await db.query(
+    'INSERT INTO student_guardians(tenant_id, student_id, guardian_user_id) VALUES($1,$2,$3)',
+    [tenantId, otherStudent.id, otherParentId]
+  );
+
+  const trip = await post('/api/trips/start', { route_id: routeId, direction: 'to_school' }, driverToken).then((r) => r.json());
+  await post(`/api/trips/${trip.tripId}/events`, { student_id: studentId, type: 'dropped' }, driverToken);
+  await post(`/api/trips/${trip.tripId}/events`, { student_id: otherStudent.id, type: 'dropped' }, driverToken);
+  const events = await get(`/api/trips/${trip.tripId}/events`, parentToken).then((r) => r.json());
+  assert.ok(events.length > 0);
+  assert.ok(events.every((event) => event.student_name === 'Aluno Teste'));
+  await post(`/api/trips/${trip.tripId}/finish`, {}, driverToken);
+});
+
+test('motorista nao le alunos da viagem de outro motorista', async () => {
+  const trip = await post('/api/trips/start', { route_id: routeId, direction: 'to_school' }, driverToken).then((r) => r.json());
+  const students = await get(`/api/trips/${trip.tripId}/students`, driver2Token).then((r) => r.json());
+  assert.deepEqual(students, []);
+  await post(`/api/trips/${trip.tripId}/finish`, {}, driverToken);
+});
+
+test('cadastros rejeitam senha numerica trivial', async () => {
+  const res = await post('/api/users', {
+    role: 'parent', name: 'Senha Fraca', email: `weak-${suffix}@test.local`, password: '123456'
+  }, adminToken);
+  assert.equal(res.status, 400);
+});
+
+test('responsavel lista somente rotas que atendem seus filhos', async () => {
+  const unrelated = await post('/api/routes', { name: 'Rota Sem Meu Filho' }, adminToken).then((r) => r.json());
+  const routes = await get('/api/routes', parentToken).then((r) => r.json());
+  assert.ok(routes.some((route) => route.id === routeId));
+  assert.ok(!routes.some((route) => route.id === unrelated.id));
+});
+
 test('login resolve pelo e-mail sem precisar de tenantId (e-mail e unico globalmente)', async () => {
-  const res = await post('/api/auth/login', { email: `admin-${suffix}@test.local`, password: 'senha123' }).then((r) => r.json());
+  const res = await post('/api/auth/login', { email: `ADMIN-${suffix}@TEST.LOCAL`, password: 'senha123' }).then((r) => r.json());
   assert.equal(res.tenantId, tenantId);
 });
 

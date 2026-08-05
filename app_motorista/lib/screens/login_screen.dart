@@ -38,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    final email = _email.text.trim();
+    final email = _email.text.trim().toLowerCase();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
       setState(() => _error = 'Digite um e-mail válido.');
       return;
@@ -67,7 +67,11 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       unawaited(_initPush());
     } else {
-      setState(() => _error = 'E-mail ou senha incorretos.');
+      final message = Api.lastError ?? 'E-mail ou senha incorretos.';
+      setState(() => _error = message);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
     }
   }
 

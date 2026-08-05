@@ -30,7 +30,9 @@ async function json(method, path, body, token, expectedStatus = 200) {
 
 function openTripSocket(tripId) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${wsBaseUrl}?token=${encodeURIComponent(parentToken)}&tripId=${tripId}`);
+    const ws = new WebSocket(`${wsBaseUrl}?tripId=${tripId}`, {
+      headers: { authorization: `Bearer ${parentToken}` },
+    });
     const timer = setTimeout(() => reject(new Error('timeout conectando WebSocket')), 3000);
     ws.once('error', reject);
     ws.once('message', (raw) => {

@@ -1,15 +1,26 @@
 import 'dart:convert';
 import 'api_http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config.dart';
 
 class Api {
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   static String? _token;
   static String? _userId;
+  static String? lastError;
 
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('token');
+    _token = await _secureStorage.read(key: 'session_token');
+    final legacyToken = prefs.getString('token');
+    if (_token == null && legacyToken != null) {
+      _token = legacyToken;
+      await _secureStorage.write(key: 'session_token', value: legacyToken);
+      await prefs.remove('token');
+    }
     _userId = prefs.getString('userId');
     // Sessao salva antes do userId existir (versao antiga do app) -- forca
     // um novo login em vez de deixar o resto do app quebrar sem esse dado.
@@ -25,7 +36,7 @@ class Api {
     _token = token;
     _userId = userId;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('token', token);
+    await _secureStorage.write(key: 'session_token', value: token);
     await prefs.setString('userId', userId);
   }
 
@@ -33,8 +44,7 @@ class Api {
   /// senha, ja que isso invalida o token antigo no backend.
   static Future<void> _updateToken(String token) async {
     _token = token;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('token', token);
+    await _secureStorage.write(key: 'session_token', value: token);
   }
 
   static Future<void> logout() async {
@@ -42,6 +52,7 @@ class Api {
     _userId = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
+    await _secureStorage.delete(key: 'session_token');
     await prefs.remove('userId');
   }
 
@@ -67,16 +78,34 @@ class Api {
   }
 
   static Future<bool> login(String email, String password) async {
+    lastError = null;
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/auth/login'),
       headers: {'content-type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
+      body: jsonEncode(
+          {'email': email.trim().toLowerCase(), 'password': password}),
     );
     if (res.statusCode == 200) {
       final body = jsonDecode(res.body);
-      if (body['role'] != 'parent') return false;
+      if (body['role'] != 'parent') {
+        lastError = 'Este acesso pertence ao perfil de motorista.';
+        return false;
+      }
       await _saveSession(body['token'] as String, body['userId'] as String);
       return true;
+    }
+    if (res.statusCode == 599) {
+      lastError = 'Sem conexão com o servidor. Verifique sua internet.';
+    } else {
+      try {
+        lastError = jsonDecode(res.body)['error'] as String?;
+      } catch (_) {
+        lastError = null;
+      }
+      if (lastError == 'credenciais invalidas') {
+        lastError = 'E-mail ou senha incorretos.';
+      }
+      lastError ??= 'E-mail ou senha incorretos.';
     }
     return false;
   }

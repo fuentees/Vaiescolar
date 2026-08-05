@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
 import '../config.dart';
 
 class ChatMessage {
@@ -11,7 +12,8 @@ class ChatMessage {
 }
 
 /// Conecta ao WebSocket da thread de chat do pai logado com o motorista/admin
-/// (WS /ws?token=...&chatWith=<o proprio userId>) e emite mensagens ao vivo.
+/// (WS /ws?chatWith=<o proprio userId>, com JWT no cabecalho Authorization)
+/// e emite mensagens ao vivo.
 class ChatSocket {
   WebSocketChannel? _channel;
   final _controller = StreamController<ChatMessage>.broadcast();
@@ -19,9 +21,11 @@ class ChatSocket {
   Stream<ChatMessage> get messages => _controller.stream;
 
   void connect({required String token, required String parentUserId}) {
-    final uri =
-        Uri.parse('${Config.wsBase}/ws?token=$token&chatWith=$parentUserId');
-    _channel = WebSocketChannel.connect(uri);
+    final uri = Uri.parse('${Config.wsBase}/ws?chatWith=$parentUserId');
+    _channel = IOWebSocketChannel.connect(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
     _channel!.stream.listen((raw) {
       final msg = jsonDecode(raw as String);
       if (msg['type'] == 'message') {

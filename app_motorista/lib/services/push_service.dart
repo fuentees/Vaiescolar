@@ -33,11 +33,26 @@ class PushService {
   /// nao tiver `google-services.json` configurado -- ver `main.dart`).
   static bool get isInitialized => _initialized;
 
+  static Future<bool> notificationsAllowed() async {
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+  }
+
+  static Future<bool> requestNotificationsPermission() async {
+    final android = _local.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await android?.requestNotificationsPermission();
+    await FirebaseMessaging.instance
+        .requestPermission(alert: true, badge: true, sound: true);
+    return notificationsAllowed();
+  }
+
   static Future<void> init() async {
     if (_initialized) return;
 
     final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
+    await requestNotificationsPermission();
     await _local.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),

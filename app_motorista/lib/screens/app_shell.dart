@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/api.dart';
 import '../services/update_service.dart';
 import 'active_route_screen.dart';
 import 'chat_threads_screen.dart';
 import 'home_screen.dart';
 import 'management_hub_screen.dart';
+import '../widgets/permission_reminder.dart';
 
 class _NavTab {
   final String label;
@@ -83,26 +85,65 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _handleBack() async {
+    if (_index != 0) {
+      _onTap(0);
+      return;
+    }
+    final minimize = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Minimizar aplicativo?'),
+        content: const Text(
+          'Sua sessão continuará conectada e você continuará recebendo notificações.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Continuar no app'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Minimizar'),
+          ),
+        ],
+      ),
+    );
+    if (minimize == true) await SystemNavigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: List.generate(
-          _tabs.length,
-          (i) => _loadedTabs[i] ?? const SizedBox.shrink(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleBack();
+      },
+      child: Scaffold(
+        body: Column(
+          children: [
+            const PermissionReminder(),
+            Expanded(
+                child: IndexedStack(
+              index: _index,
+              children: List.generate(
+                _tabs.length,
+                (i) => _loadedTabs[i] ?? const SizedBox.shrink(),
+              ),
+            )),
+          ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        onTap: _onTap,
-        type: BottomNavigationBarType.fixed,
-        items: _tabs.map((t) {
-          final icon = t.label == 'Mensagens' && _unread > 0
-              ? Badge(label: Text('$_unread'), child: Icon(t.icon))
-              : Icon(t.icon);
-          return BottomNavigationBarItem(icon: icon, label: t.label);
-        }).toList(),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _index,
+          onTap: _onTap,
+          type: BottomNavigationBarType.fixed,
+          items: _tabs.map((t) {
+            final icon = t.label == 'Mensagens' && _unread > 0
+                ? Badge(label: Text('$_unread'), child: Icon(t.icon))
+                : Icon(t.icon);
+            return BottomNavigationBarItem(icon: icon, label: t.label);
+          }).toList(),
+        ),
       ),
     );
   }

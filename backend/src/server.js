@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.17', buildNumber: 4023, releaseBuild: 23,
+      version: '1.0.18', buildNumber: 4024, releaseBuild: 24,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Corrige retorno indevido à seleção de perfil após o login em alguns celulares.',
+      notes: 'Login mais claro, permissões persistentes, botão Voltar sem desconectar e melhorias de segurança.',
     },
     responsavel: {
-      version: '1.0.17', buildNumber: 4023, releaseBuild: 23,
+      version: '1.0.18', buildNumber: 4024, releaseBuild: 24,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Corrige retorno indevido à seleção de perfil após o login em alguns celulares.',
+      notes: 'Login mais claro, permissões persistentes, botão Voltar sem desconectar e melhorias de segurança.',
     },
   };
   const version = versions[req.params.app];
@@ -125,6 +125,20 @@ app.use('/api/auth/register-parent', authLimiter);
 app.use('/api/auth/link-child', authLimiter);
 app.use('/api', apiLimiter);
 
+function passwordProblem(password) {
+  if (typeof password !== 'string' || password.length < 8) {
+    return 'a senha precisa ter ao menos 8 caracteres';
+  }
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    return 'a senha precisa conter letras e numeros';
+  }
+  const normalized = password.toLowerCase();
+  if (/^(.)\1+$/.test(password) || ['12345678', 'password', 'qwerty123'].includes(normalized)) {
+    return 'escolha uma senha menos previsivel';
+  }
+  return null;
+}
+
 /* =========================================================================
  * AUTENTICACAO / ONBOARDING
  * ========================================================================= */
@@ -135,6 +149,8 @@ app.post('/api/auth/register-tenant', async (req, res) => {
   if (!tenantName || !email || !password) {
     return res.status(400).json({ error: 'campos obrigatorios faltando' });
   }
+  const passwordError = passwordProblem(password);
+  if (passwordError) return res.status(400).json({ error: passwordError });
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -147,7 +163,7 @@ app.post('/api/auth/register-tenant', async (req, res) => {
     const u = await client.query(
       `INSERT INTO users(tenant_id, role, name, email, password_hash)
        VALUES($1,'admin',$2,$3,$4) RETURNING id, role`,
-      [tenantId, name || 'Admin', email, hash]
+      [tenantId, name || 'Admin', email.trim().toLowerCase(), hash]
     );
     await client.query('COMMIT');
     const token = sign({ userId: u.rows[0].id, tenantId, role: 'admin', tokenVersion: 0 });
@@ -168,12 +184,14 @@ app.post('/api/users', authMiddleware, requireRole('admin'), async (req, res) =>
   if (!['admin', 'driver', 'parent'].includes(role)) {
     return res.status(400).json({ error: 'role invalida' });
   }
+  const passwordError = passwordProblem(password);
+  if (passwordError) return res.status(400).json({ error: passwordError });
   const hash = await bcrypt.hash(password, 10);
   try {
     const r = await db.query(
       `INSERT INTO users(tenant_id, role, name, email, phone, password_hash)
        VALUES($1,$2,$3,$4,$5,$6) RETURNING id, role, name, email`,
-      [req.auth.tenantId, role, name, email, phone || null, hash]
+      [req.auth.tenantId, role, name, email.trim().toLowerCase(), phone || null, hash]
     );
     res.json(r.rows[0]);
   } catch (e) {
@@ -247,6 +265,8 @@ app.put('/api/auth/password', authMiddleware, async (req, res) => {
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ error: 'campos obrigatorios faltando' });
   }
+  const passwordError = passwordProblem(newPassword);
+  if (passwordError) return res.status(400).json({ error: passwordError });
   const r = await db.query('SELECT password_hash FROM users WHERE id=$1 AND tenant_id=$2', [
     req.auth.userId, req.auth.tenantId,
   ]);
@@ -320,9 +340,8 @@ app.delete('/api/auth/account', authMiddleware, async (req, res) => {
 // qualquer admin do tenant).
 app.put('/api/users/:id/password', authMiddleware, requireRole('admin'), async (req, res) => {
   const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: 'nova senha precisa ter ao menos 6 caracteres' });
-  }
+  const passwordError = passwordProblem(newPassword);
+  if (passwordError) return res.status(400).json({ error: passwordError });
   const u = await db.query(
     `SELECT id FROM users WHERE id=$1 AND tenant_id=$2 AND role IN ('admin','driver','parent')`,
     [req.params.id, req.auth.tenantId]
@@ -347,7 +366,10 @@ app.put('/api/users/:id/password', authMiddleware, requireRole('admin'), async (
 // `tenantId` no body continua aceito por compatibilidade, mas ignorado.
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  const r = await db.query('SELECT * FROM users WHERE email=$1 LIMIT 1', [email]);
+  if (typeof email !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'e-mail e senha obrigatorios' });
+  }
+  const r = await db.query('SELECT * FROM users WHERE LOWER(email)=LOWER($1) LIMIT 1', [email.trim()]);
   if (r.rows.length === 0) return res.status(401).json({ error: 'credenciais invalidas' });
   const user = r.rows[0];
   const ok = await bcrypt.compare(password, user.password_hash);
@@ -369,6 +391,8 @@ app.post('/api/auth/register-parent', async (req, res) => {
   if (!code || !email || !password) {
     return res.status(400).json({ error: 'campos obrigatorios faltando' });
   }
+  const passwordError = passwordProblem(password);
+  if (passwordError) return res.status(400).json({ error: passwordError });
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -394,7 +418,7 @@ app.post('/api/auth/register-parent', async (req, res) => {
     const u = await client.query(
       `INSERT INTO users(tenant_id, role, name, email, password_hash)
        VALUES($1,'parent',$2,$3,$4) RETURNING id`,
-      [invite.tenant_id, name || 'Responsavel', email, hash]
+      [invite.tenant_id, name || 'Responsavel', email.trim().toLowerCase(), hash]
     );
     const userId = u.rows[0].id;
     await client.query(
@@ -971,6 +995,17 @@ app.post('/api/routes', authMiddleware, requireRole('admin'), validateBody(route
 });
 
 app.get('/api/routes', authMiddleware, async (req, res) => {
+  if (req.auth.role === 'parent') {
+    const own = await db.query(
+      `SELECT DISTINCT r.* FROM routes r
+         JOIN route_students rs ON rs.route_id=r.id
+         JOIN student_guardians sg ON sg.student_id=rs.student_id
+        WHERE r.tenant_id=$1 AND sg.guardian_user_id=$2
+        ORDER BY r.name`,
+      [req.auth.tenantId, req.auth.userId]
+    );
+    return res.json(own.rows);
+  }
   const r = await db.query(
     'SELECT * FROM routes WHERE tenant_id=$1 ORDER BY name',
     [req.auth.tenantId]
@@ -1978,8 +2013,9 @@ app.get('/api/trips/:id/students', authMiddleware, requireRole('driver', 'admin'
        LEFT JOIN trip_emergency_returns er
          ON er.trip_id=t.id AND er.student_id=s.id
       WHERE t.id = $1 AND t.tenant_id = $2
+        AND ($3='admin' OR t.driver_user_id=$4)
       ORDER BY rs.position, s.name`,
-    [req.params.id, req.auth.tenantId]
+    [req.params.id, req.auth.tenantId, req.auth.role, req.auth.userId]
   );
   res.json(r.rows);
 });
@@ -2168,6 +2204,11 @@ app.post('/api/trips/:id/locations', authMiddleware, requireRole('driver', 'admi
     );
     // Retransmite em tempo real para os pais inscritos nesta viagem.
     hub.broadcast(tripId, { type: 'location', tripId, ...last });
+    const retentionDays = Math.min(90, Math.max(1, Number(process.env.GPS_RETENTION_DAYS) || 30));
+    await db.query(
+      `DELETE FROM locations WHERE recorded_at < now() - ($1::int * interval '1 day')`,
+      [retentionDays]
+    );
   }
   res.json({ ok: true, received: items.length });
 });
@@ -2300,15 +2341,17 @@ app.delete('/api/trips/:id/students/:studentId/last-event', authMiddleware, requ
 // Eventos (embarque/desembarque) de uma viagem, em ordem cronologica —
 // usado pela tela "Timeline do dia" do app dos pais.
 app.get('/api/trips/:id/events', authMiddleware, requireRole('parent'), async (req, res) => {
-  const allowed = await parentCanWatch(req.auth.tenantId, req.auth.userId, req.params.id);
+  const allowed = await parentHasStudentOnTrip(req.auth.tenantId, req.auth.userId, req.params.id);
   if (!allowed) return res.status(403).json({ error: 'sem permissao' });
   const r = await db.query(
     `SELECT te.id, te.type, te.at, te.received_by, s.name AS student_name
        FROM trip_events te
        JOIN students s ON s.id = te.student_id
+       JOIN student_guardians sg ON sg.student_id=te.student_id
       WHERE te.trip_id = $1 AND te.tenant_id = $2
+        AND sg.guardian_user_id=$3
       ORDER BY te.at ASC`,
-    [req.params.id, req.auth.tenantId]
+    [req.params.id, req.auth.tenantId, req.auth.userId]
   );
   res.json(r.rows);
 });
@@ -2319,16 +2362,37 @@ app.get('/api/trips/:id/events', authMiddleware, requireRole('parent'), async (r
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
+async function parentHasStudentOnTrip(tenantId, userId, tripId) {
+  const r = await db.query(
+    `SELECT 1 FROM trips t
+       JOIN route_students rs ON rs.route_id=t.route_id
+       JOIN student_guardians sg ON sg.student_id=rs.student_id
+      WHERE t.id=$1 AND t.tenant_id=$2 AND sg.guardian_user_id=$3
+      LIMIT 1`,
+    [tripId, tenantId, userId]
+  );
+  return r.rows.length > 0;
+}
+
 // Um pai so pode assinar viagens de rotas em que seu filho esta matriculado.
 async function parentCanWatch(tenantId, userId, tripId) {
   const r = await db.query(
     `SELECT 1
        FROM trips t
-       JOIN route_students rs ON rs.route_id = t.route_id
-       JOIN student_guardians sg ON sg.student_id = rs.student_id
+      JOIN route_students rs ON rs.route_id = t.route_id
+      JOIN student_guardians sg ON sg.student_id = rs.student_id
+      LEFT JOIN LATERAL (
+        SELECT te.type FROM trip_events te
+         WHERE te.trip_id=t.id AND te.student_id=rs.student_id
+         ORDER BY te.at DESC LIMIT 1
+      ) event ON true
+      LEFT JOIN trip_emergency_returns er
+        ON er.trip_id=t.id AND er.student_id=rs.student_id
       WHERE t.id = $1
         AND t.tenant_id = $2
         AND sg.guardian_user_id = $3
+        AND t.status='active'
+        AND (COALESCE(event.type, '') NOT IN ('dropped','not_found') OR COALESCE(er.active, false))
       LIMIT 1`,
     [tripId, tenantId, userId]
   );
@@ -2346,7 +2410,9 @@ async function staffCanChatWith(tenantId, parentUserId) {
 
 server.on('upgrade', async (req, socket, head) => {
   const query = Object.fromEntries(new URL(req.url, 'http://localhost').searchParams);
-  const auth = await verifyToken(query.token);
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const auth = await verifyToken(token);
   if (!auth) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     socket.destroy();
@@ -2358,7 +2424,11 @@ server.on('upgrade', async (req, socket, head) => {
     // Admin/driver do tenant podem observar; pai precisa ter vinculo.
     let allowed = false;
     if (auth.role === 'admin' || auth.role === 'driver') {
-      const trip = await db.query('SELECT 1 FROM trips WHERE id=$1 AND tenant_id=$2', [tripId, auth.tenantId]);
+      const trip = await db.query(
+        `SELECT 1 FROM trips WHERE id=$1 AND tenant_id=$2
+          AND ($3='admin' OR driver_user_id=$4)`,
+        [tripId, auth.tenantId, auth.role, auth.userId]
+      );
       allowed = trip.rows.length > 0;
     }
     if (!allowed && auth.role === 'parent') {

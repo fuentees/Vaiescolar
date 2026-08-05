@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
 import '../config.dart';
 
 class LivePosition {
@@ -44,8 +45,11 @@ class LiveLocation {
   Stream<ApproachingAlert> get approaching => _approachingController.stream;
 
   void connect({required String token, required String tripId}) {
-    final uri = Uri.parse('${Config.wsBase}/ws?token=$token&tripId=$tripId');
-    _channel = WebSocketChannel.connect(uri);
+    final uri = Uri.parse('${Config.wsBase}/ws?tripId=$tripId');
+    _channel = IOWebSocketChannel.connect(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
     _channel!.ready.then((_) {
       connected.value = true;
     }).catchError((_) {
