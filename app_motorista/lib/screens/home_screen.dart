@@ -259,7 +259,7 @@ class _TodaySection extends StatelessWidget {
               child: _MiniTodayCard(
                   icon: Icons.route,
                   value: '${routes.length}',
-                  label: isAdmin ? 'rotas ativas' : 'minhas rotas')),
+                  label: isAdmin ? 'rotas programadas' : 'minhas rotas')),
           const SizedBox(width: 8),
           Expanded(
               child: _MiniTodayCard(

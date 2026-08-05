@@ -137,7 +137,10 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   Future<void> _checkActiveTrip() async {
     final backendTrip = await Api.myActiveTrip();
     if (backendTrip == null) {
-      await TrackingService.clearPersistedTripId();
+      // O servidor e a fonte da verdade. Se nao existe viagem ativa, para
+      // tambem qualquer servico/notificacao local que tenha sobrevivido a
+      // um fechamento inesperado do app.
+      await TrackingService.stopTracking();
       return;
     }
     if (_activeTripId == backendTrip['trip_id']) return; // ja consistente
@@ -158,12 +161,12 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
         title: const Text('Viagem em aberto'),
         content: Text(
           'Você tem uma viagem em "$routeName" aberta desde $horario (de uma sessão anterior). '
-          'Quer continuar o rastreamento ou finalizar essa viagem agora?',
+          'Se ela ainda estiver acontecendo, continue o rastreamento. Caso contrario, encerre a viagem antiga.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Finalizar viagem'),
+            child: const Text('Encerrar viagem antiga'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -193,8 +196,20 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
       _startClock();
       _loadStudents();
     } else {
-      await Api.finishTrip(tripId);
-      await TrackingService.clearPersistedTripId();
+      final cancelled = await Api.cancelTrip(
+          tripId, 'Viagem antiga encerrada ao reabrir o aplicativo');
+      if (cancelled) {
+        await TrackingService.stopTracking();
+        await TrackingService.clearPersistedTripId();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Viagem antiga encerrada.')),
+          );
+        }
+      } else if (mounted) {
+        setState(() => _error =
+            'Nao foi possivel encerrar a viagem antiga. Verifique a internet e tente novamente.');
+      }
     }
   }
 
