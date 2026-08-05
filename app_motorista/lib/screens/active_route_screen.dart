@@ -37,6 +37,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   final Set<String> _busyStudentIds = {};
 
   Timer? _clockTimer;
+  Timer? _studentsRefreshTimer;
   DateTime _now = DateTime.now();
 
   @override
@@ -53,6 +54,7 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _studentsRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -61,11 +63,16 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
+    _studentsRefreshTimer?.cancel();
+    _studentsRefreshTimer = Timer.periodic(
+        const Duration(seconds: 10), (_) => _loadStudents(silent: true));
   }
 
   void _stopClock() {
     _clockTimer?.cancel();
     _clockTimer = null;
+    _studentsRefreshTimer?.cancel();
+    _studentsRefreshTimer = null;
   }
 
   String _formatElapsed(DateTime since) {
@@ -397,14 +404,19 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
     }
   }
 
-  Future<void> _loadStudents() async {
+  Future<void> _loadStudents({bool silent = false}) async {
     if (_activeTripId == null) return;
-    setState(() => _loadingStudents = true);
+    if (!silent && mounted) setState(() => _loadingStudents = true);
     final results = await Future.wait([
       Api.tripStudents(_activeTripId!),
       Api.tripStops(_activeTripId!),
     ]);
     final students = results[0] as List<dynamic>;
+    students.sort((a, b) {
+      final absentA = a['absent'] == true ? 1 : 0;
+      final absentB = b['absent'] == true ? 1 : 0;
+      return absentA.compareTo(absentB);
+    });
     final plan = results[1] as Map<String, dynamic>?;
     if (!mounted) return;
     setState(() {
@@ -1201,7 +1213,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                             child: Text('Abrir WhatsApp')),
                                       ],
                                     ),
-                                  if (navigationAddress != null &&
+                                  if (!absent &&
+                                      navigationAddress != null &&
                                       navigationAddress.trim().isNotEmpty)
                                     IconButton(
                                       icon:
@@ -1223,7 +1236,20 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              if (busy)
+                              if (absent)
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        AppColors.accent.withValues(alpha: .10),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text(
+                                    'Fora das paradas de hoje. Se a falta for cancelada, o aluno volta automaticamente para a rota.',
+                                  ),
+                                )
+                              else if (busy)
                                 const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 8),
                                   child: Center(
@@ -1279,7 +1305,8 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                     ),
                                   ),
                                 ]),
-                              if (!busy &&
+                              if (!absent &&
+                                  !busy &&
                                   status != 'boarded' &&
                                   status != 'dropped')
                                 SizedBox(
@@ -1292,7 +1319,10 @@ class _ActiveRouteScreenState extends State<ActiveRouteScreen> {
                                     label: const Text('Aluno não localizado'),
                                   ),
                                 ),
-                              if (!busy && status != null && !emergencyReturn)
+                              if (!absent &&
+                                  !busy &&
+                                  status != null &&
+                                  !emergencyReturn)
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: TextButton.icon(

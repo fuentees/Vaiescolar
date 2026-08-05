@@ -1075,6 +1075,15 @@ class Api {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  static Future<Map<String, dynamic>?> dashboardToday() async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/dashboard/today'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) return null;
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   static Future<bool> deleteStudent(String id) async {
     final res = await http.delete(
       Uri.parse('${Config.apiBase}/api/students/$id'),

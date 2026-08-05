@@ -79,14 +79,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.21', buildNumber: 4027, releaseBuild: 27,
+      version: '1.0.22', buildNumber: 4028, releaseBuild: 28,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Avisos de permissao aparecem somente quando a autorizacao realmente estiver pendente.',
+      notes: 'Painel diario, faltas em tempo real e alunos ausentes fora das paradas operacionais.',
     },
     responsavel: {
-      version: '1.0.21', buildNumber: 4027, releaseBuild: 27,
+      version: '1.0.22', buildNumber: 4028, releaseBuild: 28,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Avisos de permissao aparecem somente quando a autorizacao realmente estiver pendente.',
+      notes: 'Painel diario, faltas em tempo real e alunos ausentes fora das paradas operacionais.',
     },
   };
   const version = versions[req.params.app];
@@ -1628,12 +1628,17 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
            FROM absences ab
            JOIN students s ON s.id = ab.student_id
           WHERE ab.tenant_id=$1
+            AND ($4='admin' OR EXISTS (
+              SELECT 1 FROM route_students rs
+              JOIN routes rt ON rt.id=rs.route_id
+              WHERE rs.student_id=ab.student_id AND rt.driver_user_id=$2
+            ))
        ) x
        WHERE x.created_at > COALESCE(
          (SELECT notifications_cleared_at FROM users WHERE id=$2), '-infinity'::timestamptz
        )
        ORDER BY created_at DESC LIMIT $3`,
-      [req.auth.tenantId, req.auth.userId, limit]
+      [req.auth.tenantId, req.auth.userId, limit, req.auth.role]
     );
   }
   res.json(r.rows);
@@ -1698,18 +1703,99 @@ app.post('/api/absences', authMiddleware, async (req, res) => {
      RETURNING *`,
     [req.auth.tenantId, student_id, date, direction, notes || null, req.auth.userId]
   );
+  const recipients = await db.query(
+    `SELECT DISTINCT id FROM (
+       SELECT id FROM users WHERE tenant_id=$1 AND role='admin' AND active=true
+       UNION SELECT rt.driver_user_id FROM routes rt
+         JOIN route_students rs ON rs.route_id=rt.id
+        WHERE rt.tenant_id=$1 AND rs.student_id=$2 AND rt.driver_user_id IS NOT NULL
+       UNION SELECT t.driver_user_id FROM trips t
+         JOIN route_students rs ON rs.route_id=t.route_id
+        WHERE t.tenant_id=$1 AND rs.student_id=$2 AND t.status='active'
+     ) recipients WHERE id IS NOT NULL`,
+    [req.auth.tenantId, student_id]
+  );
+  const student = await db.query('SELECT name FROM students WHERE id=$1', [student_id]);
+  const directionLabel = direction === 'to_school' ? 'na ida' : direction === 'to_home' ? 'na volta' : 'na ida e na volta';
+  push.sendToUsers(recipients.rows.map((row) => row.id), 'Falta informada',
+    `${student.rows[0]?.name || 'Aluno'} nao vai em ${date} (${directionLabel}).`,
+    { type: 'absence', studentId: String(student_id), date: String(date), direction })
+    .catch((e) => console.error('[push falta]', e));
   res.json(r.rows[0]);
 });
 
+app.get('/api/dashboard/today', authMiddleware, requireRole('driver', 'admin'), async (req, res) => {
+  const driverFilter = req.auth.role === 'driver' ? req.auth.userId : null;
+  const [routes, absences, activeTrip, completedTrips] = await Promise.all([
+    db.query(
+      `SELECT r.id, r.name, r.planned_time_to_school, r.planned_time_to_home,
+              v.plate AS vehicle_plate, u.name AS driver_name,
+              count(rs.student_id)::int AS student_count
+         FROM routes r
+         LEFT JOIN vehicles v ON v.id=r.vehicle_id
+         LEFT JOIN users u ON u.id=r.driver_user_id
+         LEFT JOIN route_students rs ON rs.route_id=r.id
+        WHERE r.tenant_id=$1 AND r.active=true
+          AND ($2::uuid IS NULL OR r.driver_user_id=$2)
+        GROUP BY r.id, v.plate, u.name ORDER BY r.name`,
+      [req.auth.tenantId, driverFilter]),
+    db.query(
+      `SELECT DISTINCT ab.id, ab.student_id, s.name AS student_name,
+              ab.direction, ab.notes, r.name AS route_name
+         FROM absences ab
+         JOIN students s ON s.id=ab.student_id
+         JOIN route_students rs ON rs.student_id=s.id
+         JOIN routes r ON r.id=rs.route_id
+        WHERE ab.tenant_id=$1
+          AND ab.date=(now() AT TIME ZONE 'America/Sao_Paulo')::date
+          AND ($2::uuid IS NULL OR r.driver_user_id=$2)
+        ORDER BY s.name`,
+      [req.auth.tenantId, driverFilter]),
+    db.query(
+      `SELECT t.id, t.direction, t.started_at, r.name AS route_name,
+              v.plate AS vehicle_plate,
+              count(DISTINCT te.student_id) FILTER (WHERE te.type='boarded')::int AS boarded_count,
+              count(DISTINCT te.student_id) FILTER (WHERE te.type IN ('dropped','not_found'))::int AS completed_count
+         FROM trips t JOIN routes r ON r.id=t.route_id
+         LEFT JOIN vehicles v ON v.id=t.vehicle_id
+         LEFT JOIN trip_events te ON te.trip_id=t.id
+        WHERE t.tenant_id=$1 AND t.status='active'
+          AND ($2::uuid IS NULL OR t.driver_user_id=$2)
+        GROUP BY t.id, r.name, v.plate ORDER BY t.started_at DESC LIMIT 1`,
+      [req.auth.tenantId, driverFilter]),
+    db.query(
+      `SELECT count(*)::int AS count FROM trips
+        WHERE tenant_id=$1 AND status='finished'
+          AND (finished_at AT TIME ZONE 'America/Sao_Paulo')::date=(now() AT TIME ZONE 'America/Sao_Paulo')::date
+          AND ($2::uuid IS NULL OR driver_user_id=$2)`,
+      [req.auth.tenantId, driverFilter]),
+  ]);
+  res.json({ routes: routes.rows, absences: absences.rows,
+    activeTrip: activeTrip.rows[0] || null,
+    completedTripsToday: completedTrips.rows[0]?.count || 0 });
+});
+
 app.delete('/api/absences/:id', authMiddleware, async (req, res) => {
-  const a = await db.query('SELECT student_id FROM absences WHERE id=$1 AND tenant_id=$2', [
+  const a = await db.query('SELECT student_id, date, direction FROM absences WHERE id=$1 AND tenant_id=$2', [
     req.params.id, req.auth.tenantId,
   ]);
   if (a.rows.length === 0) return res.status(404).json({ error: 'falta nao encontrada' });
   if (!(await assertOwnsStudentOrAdmin(req, a.rows[0].student_id))) {
     return res.status(403).json({ error: 'sem permissao' });
   }
+  const recipients = await db.query(
+    `SELECT DISTINCT rt.driver_user_id AS id FROM routes rt
+       JOIN route_students rs ON rs.route_id=rt.id
+      WHERE rt.tenant_id=$1 AND rs.student_id=$2 AND rt.driver_user_id IS NOT NULL
+     UNION SELECT id FROM users WHERE tenant_id=$1 AND role='admin' AND active=true`,
+    [req.auth.tenantId, a.rows[0].student_id]
+  );
+  const student = await db.query('SELECT name FROM students WHERE id=$1', [a.rows[0].student_id]);
   await db.query('DELETE FROM absences WHERE id=$1', [req.params.id]);
+  push.sendToUsers(recipients.rows.map((row) => row.id), 'Falta cancelada',
+    `${student.rows[0]?.name || 'Aluno'} voltou para a rota de ${a.rows[0].date}.`,
+    { type: 'absence_cancelled', studentId: String(a.rows[0].student_id) })
+    .catch((e) => console.error('[push cancelar falta]', e));
   res.json({ ok: true });
 });
 

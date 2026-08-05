@@ -23,6 +23,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _summary;
+  Map<String, dynamic>? _today;
   String? _myName;
 
   List<String> _absentToday = [];
@@ -39,9 +40,15 @@ class _HomeScreenState extends State<HomeScreen> {
       _loadDashboard();
       _loadAlerts();
     }
+    _loadToday();
     Api.me().then((me) {
       if (mounted) setState(() => _myName = me?['name'] as String?);
     });
+  }
+
+  Future<void> _loadToday() async {
+    final data = await Api.dashboardToday();
+    if (mounted) setState(() => _today = data);
   }
 
   // Chamada critica de boot pro admin: se falhar por rede/servidor, mostra a
@@ -142,6 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
+          await _loadToday();
           if (Api.isAdmin) {
             await _loadDashboard();
             await _loadAlerts();
@@ -157,6 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 4),
             Text('Aqui esta o resumo de hoje.',
                 style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 20),
+            _TodaySection(data: _today, isAdmin: Api.isAdmin),
             const SizedBox(height: 20),
             if (Api.isAdmin && !_loadingAlerts) ...[
               _AlertsSection(
@@ -184,6 +194,157 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _TodaySection extends StatelessWidget {
+  final Map<String, dynamic>? data;
+  final bool isAdmin;
+  const _TodaySection({required this.data, required this.isAdmin});
+
+  String _direction(dynamic value) =>
+      value == 'to_home' ? 'Volta para casa' : 'Ida para a escola';
+
+  @override
+  Widget build(BuildContext context) {
+    if (data == null) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+    final routes = data!['routes'] as List<dynamic>? ?? [];
+    final absences = data!['absences'] as List<dynamic>? ?? [];
+    final active = data!['activeTrip'] as Map<String, dynamic>?;
+    final completed = data!['completedTripsToday'] ?? 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Operacao de hoje',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (active != null)
+          Card(
+            color: AppColors.success.withValues(alpha: .10),
+            child: ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: AppColors.success,
+                foregroundColor: Colors.white,
+                child: Icon(Icons.navigation_rounded),
+              ),
+              title: Text('${active['route_name']} em andamento'),
+              subtitle: Text('${_direction(active['direction'])} - '
+                  '${active['vehicle_plate'] ?? 'veiculo nao informado'}\n'
+                  '${active['boarded_count'] ?? 0} embarcados - ${active['completed_count'] ?? 0} concluidos'),
+              isThreeLine: true,
+              trailing: const Chip(label: Text('ATIVA')),
+            ),
+          )
+        else
+          Card(
+            child: ListTile(
+              leading:
+                  const Icon(Icons.route_outlined, color: AppColors.primary),
+              title: const Text('Nenhuma rota em andamento'),
+              subtitle: Text(routes.isEmpty
+                  ? (isAdmin
+                      ? 'Cadastre e atribua uma rota para comecar.'
+                      : 'Nenhuma rota foi atribuida a voce.')
+                  : 'Confira abaixo os horarios e inicie pela aba Rota.'),
+            ),
+          ),
+        Row(children: [
+          Expanded(
+              child: _MiniTodayCard(
+                  icon: Icons.route,
+                  value: '${routes.length}',
+                  label: isAdmin ? 'rotas ativas' : 'minhas rotas')),
+          const SizedBox(width: 8),
+          Expanded(
+              child: _MiniTodayCard(
+                  icon: Icons.event_busy,
+                  value: '${absences.length}',
+                  label: 'faltas hoje',
+                  color: AppColors.accent)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: _MiniTodayCard(
+                  icon: Icons.check_circle_outline,
+                  value: '$completed',
+                  label: 'viagens feitas',
+                  color: AppColors.success)),
+        ]),
+        if (routes.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(isAdmin ? 'Rotas programadas' : 'Suas rotas',
+              style: Theme.of(context).textTheme.titleSmall),
+          ...routes.map((route) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.directions_bus_outlined),
+                  title: Text(route['name'] as String),
+                  subtitle: Text([
+                    if (isAdmin && route['driver_name'] != null)
+                      route['driver_name'],
+                    route['vehicle_plate'] ?? 'Sem veiculo',
+                    '${route['student_count'] ?? 0} alunos',
+                    if (route['planned_time_to_school'] != null)
+                      'Ida ${route['planned_time_to_school']}',
+                    if (route['planned_time_to_home'] != null)
+                      'Volta ${route['planned_time_to_home']}',
+                  ].join(' - ')),
+                ),
+              )),
+        ],
+        if (absences.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('Nao buscar hoje',
+              style: Theme.of(context).textTheme.titleSmall),
+          ...absences.map((absence) => ListTile(
+                dense: true,
+                leading: const Icon(Icons.person_off_outlined,
+                    color: AppColors.accent),
+                title: Text(absence['student_name'] as String),
+                subtitle: Text(
+                    '${absence['route_name']} - ${switch (absence['direction']) {
+                  'to_school' => 'somente ida',
+                  'to_home' => 'somente volta',
+                  _ => 'ida e volta'
+                }}'),
+              )),
+        ],
+      ],
+    );
+  }
+}
+
+class _MiniTodayCard extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+  const _MiniTodayCard(
+      {required this.icon,
+      required this.value,
+      required this.label,
+      this.color = AppColors.primary});
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Column(children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 4),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+            Text(label,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 2),
+          ]),
+        ),
+      );
 }
 
 /// Avisos do dia (so admin, e so aparece se houver algo pra avisar).
