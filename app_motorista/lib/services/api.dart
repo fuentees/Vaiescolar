@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'api_http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -908,6 +909,44 @@ class Api {
     } catch (_) {
       return 'Nao foi possivel revogar o contrato.';
     }
+  }
+
+  static Future<List<dynamic>> contracts() async {
+    final res = await http.get(Uri.parse('${Config.apiBase}/api/contracts'),
+        headers: {'authorization': 'Bearer $_token'});
+    if (res.statusCode != 200) return [];
+    return jsonDecode(res.body) as List<dynamic>;
+  }
+
+  static Future<Map<String, dynamic>?> contractSettings() async {
+    final res = await http.get(
+        Uri.parse('${Config.apiBase}/api/contracts/settings'),
+        headers: {'authorization': 'Bearer $_token'});
+    if (res.statusCode != 200) return null;
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<String?> saveContractSettings(Map<String, dynamic> data) async {
+    final res = await http.put(
+        Uri.parse('${Config.apiBase}/api/contracts/settings'),
+        headers: {
+          'authorization': 'Bearer $_token',
+          'content-type': 'application/json'
+        },
+        body: jsonEncode(data));
+    if (res.statusCode == 200) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel salvar.';
+    }
+  }
+
+  static Future<Uint8List?> contractPdf(String contractId) async {
+    final res = await http.get(
+        Uri.parse('${Config.apiBase}/api/contracts/$contractId/pdf?download=1'),
+        headers: {'authorization': 'Bearer $_token'});
+    return res.statusCode == 200 ? res.bodyBytes : null;
   }
 
   // ---------------------------------------------------------------------

@@ -122,8 +122,17 @@ test('contrato individual registra assinatura e evidencias imutaveis', async () 
   const duplicate = await post(`/api/students/${studentId}/contracts`, {}, adminToken);
   assert.equal(duplicate.status, 409);
 
+  const invalidCpf = await post(`/api/contracts/${contract.id}/sign`, {
+    accepted: true, signer_name: 'Pai Fase Sete', cpf: '11111111111', password: 'senha123',
+  }, parentToken);
+  assert.equal(invalidCpf.status, 400);
+  const wrongPassword = await post(`/api/contracts/${contract.id}/sign`, {
+    accepted: true, signer_name: 'Pai Fase Sete', cpf: '52998224725', password: 'errada',
+  }, parentToken);
+  assert.equal(wrongPassword.status, 401);
+
   const signedResponse = await post(`/api/contracts/${contract.id}/sign`, {
-    accepted: true, signer_name: 'Pai Fase Sete',
+    accepted: true, signer_name: 'Pai Fase Sete', cpf: '529.982.247-25', password: 'senha123',
   }, parentToken);
   assert.equal(signedResponse.status, 200);
   const signed = await signedResponse.json();
@@ -132,13 +141,23 @@ test('contrato individual registra assinatura e evidencias imutaveis', async () 
   assert.ok(signed.signer_ip);
 
   const signedAgain = await post(`/api/contracts/${contract.id}/sign`, {
-    accepted: true, signer_name: 'Pai Fase Sete',
+    accepted: true, signer_name: 'Pai Fase Sete', cpf: '52998224725', password: 'senha123',
   }, parentToken);
   assert.equal(signedAgain.status, 409);
 
   const list = await get(`/api/students/${studentId}/contracts`, parentToken).then((r) => r.json());
   assert.equal(list[0].id, contract.id);
   assert.equal(list[0].contract_hash, contract.contract_hash);
+
+  const verification = await get(`/api/contracts/${contract.id}/verify`, parentToken).then((r) => r.json());
+  assert.equal(verification.contractValid, true);
+  assert.equal(verification.evidenceValid, true);
+  const pdf = await get(`/api/contracts/${contract.id}/pdf`, parentToken);
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+  assert.ok((await pdf.arrayBuffer()).byteLength > 1000);
+  const adminList = await get('/api/contracts', adminToken).then((r) => r.json());
+  assert.equal(adminList.find((item) => item.id === contract.id).download_count, 1);
 });
 
 test('conta de responsavel existente adiciona outro aluno usando a senha atual', async () => {

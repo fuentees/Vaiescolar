@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 
 class ContractScreen extends StatefulWidget {
@@ -13,6 +14,8 @@ class ContractScreen extends StatefulWidget {
 
 class _ContractScreenState extends State<ContractScreen> {
   final _name = TextEditingController();
+  final _cpf = TextEditingController();
+  final _password = TextEditingController();
   List<dynamic> _contracts = [];
   bool _loading = true;
   bool _accepted = false;
@@ -27,6 +30,8 @@ class _ContractScreenState extends State<ContractScreen> {
   @override
   void dispose() {
     _name.dispose();
+    _cpf.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -41,15 +46,17 @@ class _ContractScreenState extends State<ContractScreen> {
   }
 
   Future<void> _sign(Map<String, dynamic> contract) async {
-    if (!_accepted || _name.text.trim().length < 3) {
+    if (!_accepted ||
+        _name.text.trim().length < 3 ||
+        _cpf.text.replaceAll(RegExp(r'\D'), '').length != 11 ||
+        _password.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'Leia o contrato, confirme o aceite e informe seu nome completo.')));
+          content: Text('Confirme o aceite, nome completo, CPF e sua senha.')));
       return;
     }
     setState(() => _saving = true);
-    final error =
-        await Api.signContract(contract['id'] as String, _name.text.trim());
+    final error = await Api.signContract(
+        contract['id'] as String, _name.text.trim(), _cpf.text, _password.text);
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {
@@ -60,6 +67,44 @@ class _ContractScreenState extends State<ContractScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Contrato assinado com sucesso.')));
     await _load();
+  }
+
+  Future<void> _sharePdf(Map<String, dynamic> contract) async {
+    final bytes = await Api.contractPdf(contract['id'] as String);
+    if (!mounted) return;
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nao foi possivel gerar o PDF.')));
+      return;
+    }
+    await Share.shareXFiles([
+      XFile.fromData(bytes,
+          mimeType: 'application/pdf',
+          name:
+              'contrato-${widget.studentName.replaceAll(' ', '-').toLowerCase()}.pdf')
+    ], subject: 'Contrato de transporte escolar - ${widget.studentName}');
+    await _load();
+  }
+
+  Future<void> _verify(Map<String, dynamic> contract) async {
+    final result = await Api.verifyContract(contract['id'] as String);
+    if (!mounted) return;
+    final valid = result?['contractValid'] == true &&
+        (result?['evidenceValid'] == true || result?['evidenceValid'] == null);
+    showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+              title: Text(
+                  valid ? 'Integridade confirmada' : 'Falha na verificacao'),
+              content: Text(valid
+                  ? 'O texto e as evidencias correspondem aos hashes registrados no servidor.'
+                  : 'O documento nao passou na verificacao. Entre em contato com o transportador.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Fechar'))
+              ],
+            ));
   }
 
   String _date(dynamic value) {
@@ -76,6 +121,10 @@ class _ContractScreenState extends State<ContractScreen> {
   Widget build(BuildContext context) {
     final current =
         _contracts.isEmpty ? null : _contracts.first as Map<String, dynamic>;
+    final expired = current?['status'] == 'pending' &&
+        DateTime.tryParse(current?['expires_at'] as String? ?? '')
+                ?.isBefore(DateTime.now()) ==
+            true;
     return Scaffold(
       appBar: AppBar(title: const Text('Contrato de transporte')),
       body: _loading
@@ -100,7 +149,16 @@ class _ContractScreenState extends State<ContractScreen> {
                         style: const TextStyle(height: 1.5)),
                   )),
                   const SizedBox(height: 12),
-                  if (current['status'] == 'pending') ...[
+                  if (expired) ...[
+                    const Card(
+                        child: ListTile(
+                      leading:
+                          Icon(Icons.timer_off_outlined, color: Colors.red),
+                      title: Text('Prazo de assinatura encerrado'),
+                      subtitle:
+                          Text('Solicite ao transportador uma nova emissao.'),
+                    )),
+                  ] else if (current['status'] == 'pending') ...[
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       value: _accepted,
@@ -116,6 +174,22 @@ class _ContractScreenState extends State<ContractScreen> {
                       decoration: const InputDecoration(
                           labelText: 'Nome completo de quem esta assinando',
                           prefixIcon: Icon(Icons.draw_outlined)),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _cpf,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: 'CPF de quem esta assinando',
+                          prefixIcon: Icon(Icons.badge_outlined)),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _password,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                          labelText: 'Confirme sua senha',
+                          prefixIcon: Icon(Icons.lock_outline)),
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
@@ -141,6 +215,17 @@ class _ContractScreenState extends State<ContractScreen> {
                     SelectableText(
                         'Hash do contrato: ${current['contract_hash']}\nHash da evidencia: ${current['evidence_hash']}',
                         style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => _sharePdf(current),
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                      label: const Text('Baixar ou compartilhar PDF'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _verify(current),
+                      icon: const Icon(Icons.verified_user_outlined),
+                      label: const Text('Verificar integridade'),
+                    ),
                   ] else
                     const ListTile(
                         leading: Icon(Icons.block),

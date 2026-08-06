@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'api_http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -328,14 +329,19 @@ class Api {
   }
 
   static Future<String?> signContract(
-      String contractId, String signerName) async {
+      String contractId, String signerName, String cpf, String password) async {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/contracts/$contractId/sign'),
       headers: {
         'authorization': 'Bearer $_token',
         'content-type': 'application/json'
       },
-      body: jsonEncode({'accepted': true, 'signer_name': signerName}),
+      body: jsonEncode({
+        'accepted': true,
+        'signer_name': signerName,
+        'cpf': cpf,
+        'password': password
+      }),
     );
     if (res.statusCode == 200) return null;
     try {
@@ -343,6 +349,23 @@ class Api {
     } catch (_) {
       return 'Nao foi possivel assinar o contrato.';
     }
+  }
+
+  static Future<Uint8List?> contractPdf(String contractId) async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/contracts/$contractId/pdf?download=1'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    return res.statusCode == 200 ? res.bodyBytes : null;
+  }
+
+  static Future<Map<String, dynamic>?> verifyContract(String contractId) async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/contracts/$contractId/verify'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) return null;
+    return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   /// Vincula outro filho a conta ja logada usando um segundo codigo de

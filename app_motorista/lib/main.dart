@@ -1,6 +1,7 @@
 import 'package:app_pais/screens/app_shell.dart' as parent_shell;
 import 'package:app_pais/screens/chat_screen.dart' as parent_chat;
 import 'package:app_pais/screens/parent_map.dart' as parent_map;
+import 'package:app_pais/screens/contract_screen.dart' as parent_contract;
 import 'package:app_pais/services/api.dart' as parent_api;
 import 'package:app_pais/services/api_http.dart' as parent_http;
 import 'package:app_pais/services/push_service.dart' as parent_push;
@@ -23,6 +24,36 @@ import 'theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 AppProfile? _initialProfile;
+Map<String, dynamic>? _pendingParentPush;
+
+void _openParentPush(Map<String, dynamic> data) {
+  final navigator = navigatorKey.currentState;
+  if (navigator == null) {
+    _pendingParentPush = data;
+    return;
+  }
+  if (data['type'] == 'contract' && data['studentId'] != null) {
+    navigator.push(MaterialPageRoute(
+      builder: (_) => parent_contract.ContractScreen(
+        studentId: data['studentId'] as String,
+        studentName: data['studentName'] as String? ?? 'Aluno',
+      ),
+    ));
+    return;
+  }
+  if (data['type'] == 'chat') {
+    navigator.push(
+        MaterialPageRoute(builder: (_) => const parent_chat.ChatScreen()));
+    return;
+  }
+  final tripId = data['tripId'] as String?;
+  if (tripId != null) {
+    navigator.push(MaterialPageRoute(
+      builder: (_) => parent_map.ParentMap(
+          token: parent_api.Api.token ?? '', tripId: tripId),
+    ));
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,25 +120,7 @@ void _initPushInBackground(AppProfile? profile) async {
     FirebaseMessaging.onBackgroundMessage(
         driver_push.firebaseMessagingBackgroundHandler);
 
-    parent_push.PushService.onTap = (data) {
-      if (data['type'] == 'chat') {
-        navigatorKey.currentState?.push(
-          MaterialPageRoute(builder: (_) => const parent_chat.ChatScreen()),
-        );
-        return;
-      }
-      final tripId = data['tripId'] as String?;
-      if (tripId != null) {
-        navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (_) => parent_map.ParentMap(
-              token: parent_api.Api.token ?? '',
-              tripId: tripId,
-            ),
-          ),
-        );
-      }
-    };
+    parent_push.PushService.onTap = _openParentPush;
     parent_push.PushService.onForeground = _showForegroundNotification;
     driver_push.PushService.onTap = (data) {
       if (data['type'] == 'chat') {
@@ -132,7 +145,8 @@ void _showForegroundNotification(
     String title, String body, Map<String, dynamic> data) {
   if (data['type'] == 'trip_started' ||
       data['type'] == 'trip_event' ||
-      data['type'] == 'approaching') {
+      data['type'] == 'approaching' ||
+      data['type'] == 'contract') {
     parent_refresh.AppRefreshSignal.notifyTripsChanged();
   }
   final context = navigatorKey.currentContext;
@@ -148,6 +162,13 @@ class VaiEscolarApp extends StatelessWidget {
   const VaiEscolarApp({super.key});
 
   Widget _home() {
+    if (_pendingParentPush != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final pending = _pendingParentPush;
+        _pendingParentPush = null;
+        if (pending != null) _openParentPush(pending);
+      });
+    }
     if (_initialProfile == AppProfile.driver && driver_api.Api.token != null) {
       return const driver_shell.AppShell();
     }

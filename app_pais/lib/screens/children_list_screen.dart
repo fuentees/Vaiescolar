@@ -15,6 +15,7 @@ import 'maintenance_screen.dart';
 import 'notifications_screen.dart';
 import 'parent_map.dart';
 import 'student_detail_screen.dart';
+import 'contract_screen.dart';
 
 String _formatDate(String iso) {
   final d = DateTime.parse(iso);
@@ -517,17 +518,40 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                       ));
                     } else if (value == 'absence') {
                       _markAbsence(id);
+                    } else if (value == 'contract') {
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) =>
+                            ContractScreen(studentId: id, studentName: name),
+                      ));
                     }
                   },
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'details', child: Text('Detalhes')),
                     PopupMenuItem(
                         value: 'absence', child: Text('Marcar falta')),
+                    PopupMenuItem(value: 'contract', child: Text('Contrato')),
                   ],
                 ),
               ],
             ),
             const SizedBox(height: 14),
+            if (child['contract_status'] == 'pending') ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading:
+                    const Icon(Icons.pending_actions, color: Colors.orange),
+                title: const Text('Contrato aguardando assinatura',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle:
+                    const Text('Leia e assine para manter o cadastro regular.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      ContractScreen(studentId: id, studentName: name),
+                )),
+              ),
+              const SizedBox(height: 6),
+            ],
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),

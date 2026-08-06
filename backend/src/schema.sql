@@ -394,6 +394,20 @@ CREATE INDEX IF NOT EXISTS idx_student_contracts_student
   ON student_contracts(tenant_id, student_id, version DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_student_contracts_current
   ON student_contracts(student_id) WHERE status IN ('pending','signed');
+ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS signer_cpf TEXT;
+ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS first_downloaded_at TIMESTAMPTZ;
+ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS download_count INT NOT NULL DEFAULT 0;
+
+-- Modelo e regras configuraveis por operador. O contrato emitido continua
+-- guardando seu proprio snapshot, portanto editar o modelo nao altera o passado.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contract_title TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contract_template TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contract_validity_days INT NOT NULL DEFAULT 15;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS require_signed_contract BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_name TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tax_id TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_address TEXT;
 
 -- Forma de pagamento (P1 fase 6) -- opcional, so preenchido quando marca como pago.
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method TEXT;

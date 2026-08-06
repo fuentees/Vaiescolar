@@ -8,6 +8,7 @@ import 'schools_screen.dart';
 import 'students_screen.dart';
 import 'users_screen.dart';
 import 'vehicles_screen.dart';
+import 'contracts_screen.dart';
 
 class _HubItem {
   final IconData icon;
@@ -23,6 +24,7 @@ const _items = [
   _HubItem(Icons.local_shipping_outlined, 'Veiculos', _vehiclesBuilder),
   _HubItem(Icons.group_outlined, 'Equipe e responsaveis', _usersBuilder),
   _HubItem(Icons.payments_outlined, 'Financeiro', _financeBuilder),
+  _HubItem(Icons.description_outlined, 'Contratos', _contractsBuilder),
   _HubItem(Icons.bar_chart_outlined, 'Relatorios', _reportsBuilder),
   _HubItem(Icons.receipt_long_outlined, 'Auditoria', _auditBuilder),
 ];
@@ -33,6 +35,7 @@ Widget _routesBuilder(BuildContext _) => const RoutesScreen();
 Widget _vehiclesBuilder(BuildContext _) => const VehiclesScreen();
 Widget _usersBuilder(BuildContext _) => const UsersScreen();
 Widget _financeBuilder(BuildContext _) => const FinanceScreen();
+Widget _contractsBuilder(BuildContext _) => const ContractsScreen();
 Widget _reportsBuilder(BuildContext _) => const ReportsScreen();
 Widget _auditBuilder(BuildContext _) => const AuditScreen();
 
