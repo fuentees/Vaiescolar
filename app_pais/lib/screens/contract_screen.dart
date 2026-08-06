@@ -16,10 +16,13 @@ class _ContractScreenState extends State<ContractScreen> {
   final _name = TextEditingController();
   final _cpf = TextEditingController();
   final _password = TextEditingController();
+  final _code = TextEditingController();
   List<dynamic> _contracts = [];
   bool _loading = true;
   bool _accepted = false;
   bool _saving = false;
+  bool _sendingCode = false;
+  bool _codeSent = false;
 
   @override
   void initState() {
@@ -32,6 +35,7 @@ class _ContractScreenState extends State<ContractScreen> {
     _name.dispose();
     _cpf.dispose();
     _password.dispose();
+    _code.dispose();
     super.dispose();
   }
 
@@ -49,14 +53,16 @@ class _ContractScreenState extends State<ContractScreen> {
     if (!_accepted ||
         _name.text.trim().length < 3 ||
         _cpf.text.replaceAll(RegExp(r'\D'), '').length != 11 ||
-        _password.text.isEmpty) {
+        _password.text.isEmpty ||
+        _code.text.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Confirme o aceite, nome completo, CPF e sua senha.')));
+          content: Text(
+              'Confirme o aceite, nome, CPF, senha e codigo de 6 digitos.')));
       return;
     }
     setState(() => _saving = true);
-    final error = await Api.signContract(
-        contract['id'] as String, _name.text.trim(), _cpf.text, _password.text);
+    final error = await Api.signContract(contract['id'] as String,
+        _name.text.trim(), _cpf.text, _password.text, _code.text);
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {
@@ -67,6 +73,20 @@ class _ContractScreenState extends State<ContractScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Contrato assinado com sucesso.')));
     await _load();
+  }
+
+  Future<void> _sendCode(Map<String, dynamic> contract) async {
+    setState(() => _sendingCode = true);
+    final error = await Api.requestContractCode(contract['id'] as String);
+    if (!mounted) return;
+    setState(() {
+      _sendingCode = false;
+      _codeSent = error == null;
+    });
+    if (Api.lastContractDevCode != null) _code.text = Api.lastContractDevCode!;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error ??
+            'Codigo enviado por notificacao. Ele vence em 10 minutos.')));
   }
 
   Future<void> _sharePdf(Map<String, dynamic> contract) async {
@@ -105,6 +125,39 @@ class _ContractScreenState extends State<ContractScreen> {
                     child: const Text('Fechar'))
               ],
             ));
+  }
+
+  Future<void> _requestCancellation(Map<String, dynamic> contract) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+        context: context,
+        builder: (_) => AlertDialog(
+              title: const Text('Solicitar cancelamento'),
+              content: TextField(
+                  controller: controller,
+                  minLines: 3,
+                  maxLines: 6,
+                  maxLength: 1000,
+                  decoration: const InputDecoration(
+                      labelText: 'Explique o motivo',
+                      alignLabelWithHint: true)),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Voltar')),
+                FilledButton(
+                    onPressed: () =>
+                        Navigator.pop(context, controller.text.trim()),
+                    child: const Text('Enviar solicitacao'))
+              ],
+            ));
+    controller.dispose();
+    if (reason == null || reason.length < 10) return;
+    final error =
+        await Api.requestContractCancellation(contract['id'] as String, reason);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error ?? 'Solicitacao enviada para analise.')));
   }
 
   String _date(dynamic value) {
@@ -191,6 +244,27 @@ class _ContractScreenState extends State<ContractScreen> {
                           labelText: 'Confirme sua senha',
                           prefixIcon: Icon(Icons.lock_outline)),
                     ),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _code,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          decoration: const InputDecoration(
+                            labelText: 'Codigo de confirmacao',
+                            counterText: '',
+                            prefixIcon: Icon(Icons.password_outlined),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed:
+                            _sendingCode ? null : () => _sendCode(current),
+                        child: Text(_codeSent ? 'Reenviar' : 'Enviar codigo'),
+                      ),
+                    ]),
                     const SizedBox(height: 16),
                     FilledButton.icon(
                       onPressed: _saving ? null : () => _sign(current),
@@ -225,6 +299,11 @@ class _ContractScreenState extends State<ContractScreen> {
                       onPressed: () => _verify(current),
                       icon: const Icon(Icons.verified_user_outlined),
                       label: const Text('Verificar integridade'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _requestCancellation(current),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Solicitar cancelamento'),
                     ),
                   ] else
                     const ListTile(

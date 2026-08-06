@@ -14,6 +14,7 @@ class Api {
   static String? lastError;
   static String? lastLinkedStudentName;
   static bool lastLinkUsedExistingAccount = false;
+  static String? lastContractDevCode;
 
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -328,8 +329,29 @@ class Api {
     return jsonDecode(res.body) as List<dynamic>;
   }
 
-  static Future<String?> signContract(
-      String contractId, String signerName, String cpf, String password) async {
+  static Future<String?> requestContractCode(String contractId) async {
+    lastContractDevCode = null;
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/contracts/$contractId/challenge'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({}),
+    );
+    if (res.statusCode == 200) {
+      lastContractDevCode = jsonDecode(res.body)['devCode'] as String?;
+      return null;
+    }
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel enviar o codigo.';
+    }
+  }
+
+  static Future<String?> signContract(String contractId, String signerName,
+      String cpf, String password, String verificationCode) async {
     final res = await http.post(
       Uri.parse('${Config.apiBase}/api/contracts/$contractId/sign'),
       headers: {
@@ -340,7 +362,8 @@ class Api {
         'accepted': true,
         'signer_name': signerName,
         'cpf': cpf,
-        'password': password
+        'password': password,
+        'verification_code': verificationCode
       }),
     );
     if (res.statusCode == 200) return null;
@@ -366,6 +389,25 @@ class Api {
     );
     if (res.statusCode != 200) return null;
     return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<String?> requestContractCancellation(
+      String contractId, String reason) async {
+    final res = await http.post(
+      Uri.parse(
+          '${Config.apiBase}/api/contracts/$contractId/cancellation-request'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+    if (res.statusCode == 201) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel enviar a solicitacao.';
+    }
   }
 
   /// Vincula outro filho a conta ja logada usando um segundo codigo de

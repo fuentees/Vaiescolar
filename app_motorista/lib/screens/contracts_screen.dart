@@ -39,6 +39,34 @@ class _ContractsScreenState extends State<ContractsScreen> {
     await _load();
   }
 
+  Future<void> _bulk(bool renew) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(renew
+            ? 'Renovar todos os contratos?'
+            : 'Emitir contratos pendentes?'),
+        content: Text(renew
+            ? 'Os contratos vigentes serao revogados, preservados no historico e uma nova versao sera emitida para todos os alunos ativos.'
+            : 'Sera emitido um contrato apenas para alunos ativos sem contrato vigente.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(renew ? 'Renovar' : 'Emitir')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final error = await Api.bulkIssueContracts(renewSigned: renew);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error ?? 'Operacao em lote concluida.')));
+    if (error == null) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final pending =
@@ -48,6 +76,24 @@ class _ContractsScreenState extends State<ContractsScreen> {
     final signed = _items.where((e) => e['display_status'] == 'signed').length;
     return Scaffold(
         appBar: AppBar(title: const Text('Contratos'), actions: [
+          IconButton(
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) =>
+                        const ContractCancellationRequestsScreen())),
+            icon: const Icon(Icons.assignment_return_outlined),
+            tooltip: 'Solicitacoes de cancelamento',
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) => _bulk(value == 'renew'),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                  value: 'issue', child: Text('Emitir pendentes em lote')),
+              PopupMenuItem(
+                  value: 'renew', child: Text('Renovar todos em lote')),
+            ],
+          ),
           IconButton(
               onPressed: () async {
                 await Navigator.push(
@@ -113,6 +159,96 @@ class _ContractsScreenState extends State<ContractsScreen> {
                   })
                 ])));
   }
+}
+
+class ContractCancellationRequestsScreen extends StatefulWidget {
+  const ContractCancellationRequestsScreen({super.key});
+  @override
+  State<ContractCancellationRequestsScreen> createState() =>
+      _ContractCancellationRequestsScreenState();
+}
+
+class _ContractCancellationRequestsScreenState
+    extends State<ContractCancellationRequestsScreen> {
+  List<dynamic> _items = [];
+  bool _loading = true;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final rows = await Api.contractCancellationRequests();
+    if (mounted) {
+      setState(() {
+        _items = rows;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _resolve(String id, String decision) async {
+    final error = await Api.resolveContractCancellation(id, decision);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error ?? 'Solicitacao analisada.')));
+    if (error == null) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+      appBar: AppBar(title: const Text('Cancelamentos')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(padding: const EdgeInsets.all(16), children: [
+                if (_items.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.all(30),
+                      child: Text('Nenhuma solicitacao.',
+                          textAlign: TextAlign.center)),
+                ..._items.map((raw) {
+                  final item = raw as Map<String, dynamic>;
+                  final pending = item['status'] == 'pending';
+                  return Card(
+                      child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item['student_name'] as String,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                                Text(
+                                    'Solicitado por ${item['requester_name'] ?? 'Responsavel'}'),
+                                const SizedBox(height: 8),
+                                Text(item['reason'] as String),
+                                if (pending)
+                                  Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        TextButton(
+                                            onPressed: () => _resolve(
+                                                item['id'] as String,
+                                                'rejected'),
+                                            child: const Text('Recusar')),
+                                        FilledButton(
+                                            onPressed: () => _resolve(
+                                                item['id'] as String,
+                                                'approved'),
+                                            child: const Text('Aprovar'))
+                                      ])
+                                else
+                                  Chip(
+                                      label: Text(item['status'] == 'approved'
+                                          ? 'Aprovado'
+                                          : 'Recusado'))
+                              ])));
+                })
+              ])));
 }
 
 class ContractSettingsScreen extends StatefulWidget {
@@ -211,6 +347,11 @@ class _ContractSettingsScreenState extends State<ContractSettingsScreen> {
                   maxLines: 30,
                   decoration: const InputDecoration(
                       labelText: 'Texto do modelo', alignLabelWithHint: true)),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: Text(
+                    'Campos automaticos: {{ALUNO}}, {{RESPONSAVEL}}, {{ESCOLA}}, {{ENDERECO_ALUNO}}, {{MENSALIDADE}}, {{TRANSPORTADOR}}, {{CPF_CNPJ_TRANSPORTADOR}} e {{ENDERECO_TRANSPORTADOR}}.'),
+              ),
               SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: _block,

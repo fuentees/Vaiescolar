@@ -918,6 +918,49 @@ class Api {
     return jsonDecode(res.body) as List<dynamic>;
   }
 
+  static Future<String?> bulkIssueContracts({bool renewSigned = false}) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/contracts/bulk-issue'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({'renew_signed': renewSigned}),
+    );
+    if (res.statusCode == 200) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel emitir em lote.';
+    }
+  }
+
+  static Future<List<dynamic>> contractCancellationRequests() async {
+    final res = await http.get(
+        Uri.parse('${Config.apiBase}/api/contracts/cancellation-requests'),
+        headers: {'authorization': 'Bearer $_token'});
+    if (res.statusCode != 200) return [];
+    return jsonDecode(res.body) as List<dynamic>;
+  }
+
+  static Future<String?> resolveContractCancellation(
+      String id, String decision) async {
+    final res = await http.post(
+        Uri.parse(
+            '${Config.apiBase}/api/contracts/cancellation-requests/$id/resolve'),
+        headers: {
+          'authorization': 'Bearer $_token',
+          'content-type': 'application/json'
+        },
+        body: jsonEncode({'decision': decision}));
+    if (res.statusCode == 200) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel analisar a solicitacao.';
+    }
+  }
+
   static Future<Map<String, dynamic>?> contractSettings() async {
     final res = await http.get(
         Uri.parse('${Config.apiBase}/api/contracts/settings'),

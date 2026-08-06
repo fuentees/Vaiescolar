@@ -127,21 +127,27 @@ test('contrato individual registra assinatura e evidencias imutaveis', async () 
   }, parentToken);
   assert.equal(invalidCpf.status, 400);
   const wrongPassword = await post(`/api/contracts/${contract.id}/sign`, {
-    accepted: true, signer_name: 'Pai Fase Sete', cpf: '52998224725', password: 'errada',
+    accepted: true, signer_name: 'Pai Fase Sete', cpf: '52998224725', password: 'errada', verification_code: '123456',
   }, parentToken);
   assert.equal(wrongPassword.status, 401);
 
+  const challenge = await post(`/api/contracts/${contract.id}/challenge`, {}, parentToken).then((r) => r.json());
+  assert.match(challenge.devCode, /^\d{6}$/);
+
   const signedResponse = await post(`/api/contracts/${contract.id}/sign`, {
-    accepted: true, signer_name: 'Pai Fase Sete', cpf: '529.982.247-25', password: 'senha123',
+    accepted: true, signer_name: 'Pai Fase Sete', cpf: '529.982.247-25', password: 'senha123', verification_code: challenge.devCode,
   }, parentToken);
   assert.equal(signedResponse.status, 200);
   const signed = await signedResponse.json();
   assert.equal(signed.status, 'signed');
   assert.equal(signed.evidence_hash.length, 64);
   assert.ok(signed.signer_ip);
+  const rawCpf = await db.query('SELECT signer_cpf FROM student_contracts WHERE id=$1', [contract.id]);
+  assert.ok(rawCpf.rows[0].signer_cpf.startsWith('enc:'));
+  assert.ok(!rawCpf.rows[0].signer_cpf.includes('52998224725'));
 
   const signedAgain = await post(`/api/contracts/${contract.id}/sign`, {
-    accepted: true, signer_name: 'Pai Fase Sete', cpf: '52998224725', password: 'senha123',
+    accepted: true, signer_name: 'Pai Fase Sete', cpf: '52998224725', password: 'senha123', verification_code: challenge.devCode,
   }, parentToken);
   assert.equal(signedAgain.status, 409);
 
@@ -156,8 +162,25 @@ test('contrato individual registra assinatura e evidencias imutaveis', async () 
   assert.equal(pdf.status, 200);
   assert.equal(pdf.headers.get('content-type'), 'application/pdf');
   assert.ok((await pdf.arrayBuffer()).byteLength > 1000);
+  const publicVerification = await get(`/contracts/verify/${contract.verification_token}`);
+  assert.equal(publicVerification.status, 200);
+  const publicHtml = await publicVerification.text();
+  assert.match(publicHtml, /Documento autentico/);
+  assert.ok(!publicHtml.includes('52998224725'));
   const adminList = await get('/api/contracts', adminToken).then((r) => r.json());
   assert.equal(adminList.find((item) => item.id === contract.id).download_count, 1);
+
+  const cancellation = await post(`/api/contracts/${contract.id}/cancellation-request`, {
+    reason: 'Mudanca de cidade da familia no proximo mes.',
+  }, parentToken);
+  assert.equal(cancellation.status, 201);
+  const requests = await get('/api/contracts/cancellation-requests', adminToken).then((r) => r.json());
+  const request = requests.find((item) => item.contract_id === contract.id);
+  assert.equal(request.status, 'pending');
+  const rejected = await post(`/api/contracts/cancellation-requests/${request.id}/resolve`, {
+    decision: 'rejected',
+  }, adminToken);
+  assert.equal(rejected.status, 200);
 });
 
 test('conta de responsavel existente adiciona outro aluno usando a senha atual', async () => {

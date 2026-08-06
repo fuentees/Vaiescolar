@@ -398,6 +398,39 @@ ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS signer_cpf TEXT;
 ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS first_downloaded_at TIMESTAMPTZ;
 ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS download_count INT NOT NULL DEFAULT 0;
+ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS verification_token TEXT;
+ALTER TABLE student_contracts ADD COLUMN IF NOT EXISTS last_reminder_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_student_contracts_verification_token
+  ON student_contracts(verification_token) WHERE verification_token IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS contract_signing_challenges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  contract_id UUID NOT NULL REFERENCES student_contracts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash CHAR(64) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_contract_challenges_lookup
+  ON contract_signing_challenges(contract_id,user_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS contract_cancellation_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  contract_id UUID NOT NULL REFERENCES student_contracts(id) ON DELETE CASCADE,
+  requested_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ,
+  resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  resolution_notes TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contract_cancel_one_pending
+  ON contract_cancellation_requests(contract_id) WHERE status='pending';
 
 -- Modelo e regras configuraveis por operador. O contrato emitido continua
 -- guardando seu proprio snapshot, portanto editar o modelo nao altera o passado.

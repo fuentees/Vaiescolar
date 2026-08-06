@@ -7,6 +7,7 @@ const { WebSocketServer } = require('ws');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
+const QRCode = require('qrcode');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
@@ -81,14 +82,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.27', buildNumber: 4033, releaseBuild: 33,
+      version: '1.0.28', buildNumber: 4034, releaseBuild: 34,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contratos completos: modelo editavel, CPF e senha, painel, vencimento, PDF e verificacao.',
+      notes: 'Contratos reforcados: CPF cifrado, codigo de confirmacao, QR publico, lembretes e operacoes em lote.',
     },
     responsavel: {
-      version: '1.0.27', buildNumber: 4033, releaseBuild: 33,
+      version: '1.0.28', buildNumber: 4034, releaseBuild: 34,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contratos completos: modelo editavel, CPF e senha, painel, vencimento, PDF e verificacao.',
+      notes: 'Contratos reforcados: CPF cifrado, codigo de confirmacao, QR publico, lembretes e operacoes em lote.',
     },
   };
   const version = versions[req.params.app];
@@ -121,10 +122,12 @@ const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHea
 // Chat especifico: 30 msgs/min por IP, alem do limite geral de /api -- evita
 // spam/flood de uma conversa sem travar o resto da API.
 const chatLimiter = rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
+const contractChallengeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register-tenant', authLimiter);
 app.use('/api/auth/register-parent', authLimiter);
 app.use('/api/auth/link-child', authLimiter);
+app.use('/api/contracts/:id/challenge', contractChallengeLimiter);
 app.use('/api', apiLimiter);
 
 function passwordProblem(password) {
@@ -933,6 +936,30 @@ function maskedCpf(value) {
   return `***.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-**`;
 }
 
+function encryptCpf(value) {
+  return `enc:${encryptPaymentSecret(String(value).replace(/\D/g, ''))}`;
+}
+
+function decryptCpf(value) {
+  if (!value) return null;
+  const raw = String(value);
+  if (/^\d{11}$/.test(raw)) return raw; // compatibilidade para registros anteriores
+  if (!raw.startsWith('enc:')) throw new Error('formato de CPF cifrado invalido');
+  return decryptPaymentSecret(raw.slice(4));
+}
+
+async function migrateLegacyContractCpfs() {
+  const legacy = await db.query(
+    `SELECT id,signer_cpf FROM student_contracts WHERE signer_cpf ~ '^[0-9]{11}$'`
+  );
+  for (const row of legacy.rows) {
+    await db.query('UPDATE student_contracts SET signer_cpf=$1 WHERE id=$2 AND signer_cpf=$3',
+      [encryptCpf(row.signer_cpf), row.id, row.signer_cpf]);
+  }
+  if (legacy.rows.length) console.log(`[security] ${legacy.rows.length} CPF(s) legado(s) cifrado(s)`);
+}
+migrateLegacyContractCpfs().catch((error) => console.error('[security] falha ao cifrar CPFs legados', error.message));
+
 async function contractAccess(req, studentId) {
   if (req.auth.role === 'admin') {
     const found = await db.query('SELECT id FROM students WHERE id=$1 AND tenant_id=$2', [studentId, req.auth.tenantId]);
@@ -952,10 +979,9 @@ app.get('/api/students/:id/contracts', authMiddleware, async (req, res) => {
     `SELECT c.id, c.student_id, c.version, c.title, c.contract_text, c.contract_hash,
             c.status, c.issued_at, c.signer_name, c.signer_email,
             c.signer_relationship, c.signed_at, host(c.signer_ip) AS signer_ip,
-            c.signer_user_agent, c.acceptance_text, c.evidence_hash,
+            c.signer_user_agent, c.acceptance_text, c.evidence_hash, c.signer_cpf,
             c.revoked_at, c.revocation_reason, c.expires_at,
             c.first_downloaded_at, c.download_count,
-            CASE WHEN c.signer_cpf IS NULL THEN NULL ELSE concat('***.',substring(c.signer_cpf,4,3),'.',substring(c.signer_cpf,7,3),'-**') END AS signer_cpf_masked,
             s.name AS student_name,
             t.name AS tenant_name
        FROM student_contracts c
@@ -965,7 +991,10 @@ app.get('/api/students/:id/contracts', authMiddleware, async (req, res) => {
       ORDER BY c.version DESC`,
     [req.params.id, req.auth.tenantId]
   );
-  res.json(result.rows);
+  res.json(result.rows.map((row) => ({ ...row,
+    signer_cpf_masked: row.signer_cpf ? maskedCpf(decryptCpf(row.signer_cpf)) : null,
+    signer_cpf: undefined,
+  })));
 });
 
 app.get('/api/contracts/settings', authMiddleware, requireRole('admin'), async (req, res) => {
@@ -1010,14 +1039,95 @@ app.get('/api/contracts', authMiddleware, requireRole('admin'), async (req, res)
   const rows = result.rows.map((row) => ({ ...row,
     display_status: row.status === 'pending' && row.expires_at && new Date(row.expires_at) < new Date() ? 'expired' : row.status,
   }));
+  const reminders = await db.query(
+    `SELECT c.id,c.student_id,s.name,
+            array_agg(DISTINCT sg.guardian_user_id) FILTER (WHERE sg.guardian_user_id IS NOT NULL) AS guardian_ids
+       FROM student_contracts c JOIN students s ON s.id=c.student_id
+       LEFT JOIN student_guardians sg ON sg.student_id=c.student_id
+      WHERE c.tenant_id=$1 AND c.status='pending' AND c.expires_at>now()
+        AND (c.last_reminder_at IS NULL OR c.last_reminder_at<now()-interval '24 hours')
+        AND (c.issued_at<now()-interval '3 days' OR c.expires_at<now()+interval '3 days')
+      GROUP BY c.id,s.name`, [req.auth.tenantId]
+  );
+  for (const reminder of reminders.rows) {
+    push.sendToUsers(reminder.guardian_ids || [], 'Contrato aguardando assinatura',
+      `O contrato de ${reminder.name} ainda esta pendente. Verifique antes do vencimento.`,
+      { type: 'contract', studentId: reminder.student_id, studentName: reminder.name, contractId: reminder.id }
+    ).catch((error) => console.error('[lembrete contrato]', error.message));
+    await db.query('UPDATE student_contracts SET last_reminder_at=now() WHERE id=$1', [reminder.id]);
+  }
   res.json(rows);
+});
+
+app.post('/api/contracts/bulk-issue', authMiddleware, requireRole('admin'), async (req, res) => {
+  const renewSigned = req.body.renew_signed === true;
+  const tenant = await db.query(
+    `SELECT name,legal_name,tax_id,legal_address,contract_title,contract_template,contract_validity_days
+       FROM tenants WHERE id=$1`, [req.auth.tenantId]
+  );
+  if (renewSigned) {
+    await db.query(
+      `UPDATE student_contracts SET status='revoked',revoked_at=now(),revoked_by_user_id=$1,
+              revocation_reason='Renovacao em lote solicitada pelo administrador'
+        WHERE tenant_id=$2 AND status IN ('pending','signed')`, [req.auth.userId, req.auth.tenantId]
+    );
+  } else {
+    await db.query(
+      `UPDATE student_contracts SET status='revoked',revoked_at=now(),revoked_by_user_id=$1,
+              revocation_reason='Prazo expirado antes da emissao em lote'
+        WHERE tenant_id=$2 AND status='pending' AND expires_at<now()`, [req.auth.userId, req.auth.tenantId]
+    );
+  }
+  const students = await db.query(
+    `SELECT s.id,s.name,s.home_address,s.monthly_fee,sc.name AS school_name
+       FROM students s LEFT JOIN schools sc ON sc.id=s.school_id
+      WHERE s.tenant_id=$1 AND s.active=true AND NOT EXISTS (
+        SELECT 1 FROM student_contracts c WHERE c.student_id=s.id AND c.status IN ('pending','signed'))
+      ORDER BY s.name`, [req.auth.tenantId]
+  );
+  let created = 0;
+  for (const student of students.rows) {
+    const guardians = await db.query(
+      `SELECT string_agg(u.name, ', ' ORDER BY u.name) AS names,
+              array_agg(u.id) AS ids
+         FROM student_guardians sg JOIN users u ON u.id=sg.guardian_user_id
+        WHERE sg.student_id=$1`, [student.id]
+    );
+    const t = tenant.rows[0];
+    const values = {
+      '{{ALUNO}}': student.name, '{{RESPONSAVEL}}': guardians.rows[0]?.names || 'nao informado',
+      '{{ESCOLA}}': student.school_name || 'nao informada', '{{ENDERECO_ALUNO}}': student.home_address || 'nao informado',
+      '{{MENSALIDADE}}': student.monthly_fee == null ? 'nao definida' : `R$ ${Number(student.monthly_fee).toFixed(2).replace('.', ',')}`,
+      '{{TRANSPORTADOR}}': t.legal_name || t.name, '{{CPF_CNPJ_TRANSPORTADOR}}': t.tax_id || 'nao informado',
+      '{{ENDERECO_TRANSPORTADOR}}': t.legal_address || 'nao informado',
+    };
+    let body = t.contract_template || DEFAULT_CONTRACT_TEXT;
+    for (const [key, value] of Object.entries(values)) body = body.split(key).join(value);
+    const text = `CONTRATADO: ${values['{{TRANSPORTADOR}}']}\nCPF/CNPJ: ${values['{{CPF_CNPJ_TRANSPORTADOR}}']}\nENDERECO: ${values['{{ENDERECO_TRANSPORTADOR}}']}\nALUNO: ${student.name}\n\n${body}`;
+    const version = await db.query('SELECT COALESCE(max(version),0)+1 AS version FROM student_contracts WHERE student_id=$1', [student.id]);
+    const inserted = await db.query(
+      `INSERT INTO student_contracts(tenant_id,student_id,version,title,contract_text,contract_hash,issued_by_user_id,expires_at,verification_token)
+       VALUES($1,$2,$3,$4,$5,$6,$7,now()+($8::text||' days')::interval,$9) RETURNING id`,
+      [req.auth.tenantId, student.id, version.rows[0].version, t.contract_title || `Contrato de transporte escolar - ${student.name}`,
+        text, sha256(text), req.auth.userId, t.contract_validity_days || 15, crypto.randomBytes(24).toString('base64url')]
+    );
+    created++;
+    push.sendToUsers(guardians.rows[0]?.ids || [], 'Contrato disponivel',
+      `O contrato de ${student.name} esta aguardando sua assinatura.`,
+      { type: 'contract', studentId: student.id, studentName: student.name, contractId: inserted.rows[0].id }
+    ).catch((error) => console.error('[push contrato lote]', error.message));
+  }
+  await logAudit(req, renewSigned ? 'renovar_contratos_lote' : 'emitir_contratos_lote', 'student_contract', null, { count: created });
+  res.json({ ok: true, created });
 });
 
 app.post('/api/students/:id/contracts', authMiddleware, requireRole('admin'), async (req, res) => {
   const student = await db.query(
-    `SELECT s.id, s.name, t.name AS tenant_name, t.legal_name, t.tax_id,
+    `SELECT s.id, s.name, s.home_address, s.monthly_fee, sc.name AS school_name,
+            t.name AS tenant_name, t.legal_name, t.tax_id,
             t.legal_address, t.contract_title, t.contract_template, t.contract_validity_days
        FROM students s JOIN tenants t ON t.id=s.tenant_id
+       LEFT JOIN schools sc ON sc.id=s.school_id
       WHERE s.id=$1 AND s.tenant_id=$2`, [req.params.id, req.auth.tenantId]
   );
   if (!student.rows.length) return res.status(404).json({ error: 'aluno nao encontrado' });
@@ -1035,8 +1145,25 @@ app.post('/api/students/:id/contracts', authMiddleware, requireRole('admin'), as
     return res.status(409).json({ error: 'este aluno ja possui um contrato vigente; revogue-o antes de emitir uma nova versao' });
   }
   const party = student.rows[0];
+  const guardianNames = await db.query(
+    `SELECT string_agg(u.name, ', ' ORDER BY u.name) AS names
+       FROM student_guardians sg JOIN users u ON u.id=sg.guardian_user_id
+      WHERE sg.student_id=$1 AND sg.tenant_id=$2`, [req.params.id, req.auth.tenantId]
+  );
   const title = String(req.body.title || party.contract_title || `Contrato de transporte escolar - ${party.name}`).trim();
-  const generatedText = `CONTRATADO: ${party.legal_name || party.tenant_name}\nCPF/CNPJ: ${party.tax_id || 'nao informado'}\nENDERECO: ${party.legal_address || 'nao informado'}\nALUNO: ${party.name}\n\n${party.contract_template || DEFAULT_CONTRACT_TEXT}`;
+  const values = {
+    '{{ALUNO}}': party.name,
+    '{{RESPONSAVEL}}': guardianNames.rows[0]?.names || 'nao informado',
+    '{{ESCOLA}}': party.school_name || 'nao informada',
+    '{{ENDERECO_ALUNO}}': party.home_address || 'nao informado',
+    '{{MENSALIDADE}}': party.monthly_fee == null ? 'nao definida' : `R$ ${Number(party.monthly_fee).toFixed(2).replace('.', ',')}`,
+    '{{TRANSPORTADOR}}': party.legal_name || party.tenant_name,
+    '{{CPF_CNPJ_TRANSPORTADOR}}': party.tax_id || 'nao informado',
+    '{{ENDERECO_TRANSPORTADOR}}': party.legal_address || 'nao informado',
+  };
+  let templateText = party.contract_template || DEFAULT_CONTRACT_TEXT;
+  for (const [placeholder, value] of Object.entries(values)) templateText = templateText.split(placeholder).join(value);
+  const generatedText = `CONTRATADO: ${values['{{TRANSPORTADOR}}']}\nCPF/CNPJ: ${values['{{CPF_CNPJ_TRANSPORTADOR}}']}\nENDERECO: ${values['{{ENDERECO_TRANSPORTADOR}}']}\nALUNO: ${party.name}\n\n${templateText}`;
   const text = String(req.body.contract_text || generatedText).trim();
   if (title.length < 5 || title.length > 160) return res.status(400).json({ error: 'titulo invalido' });
   if (text.length < 200 || text.length > 30000) return res.status(400).json({ error: 'o contrato deve ter entre 200 e 30000 caracteres' });
@@ -1044,9 +1171,9 @@ app.post('/api/students/:id/contracts', authMiddleware, requireRole('admin'), as
   const validity = Number(req.body.validity_days ?? party.contract_validity_days ?? 15);
   if (!Number.isInteger(validity) || validity < 1 || validity > 365) return res.status(400).json({ error: 'prazo invalido' });
   const created = await db.query(
-    `INSERT INTO student_contracts(tenant_id,student_id,version,title,contract_text,contract_hash,issued_by_user_id,expires_at)
-     VALUES($1,$2,$3,$4,$5,$6,$7,now()+($8::text||' days')::interval) RETURNING *`,
-    [req.auth.tenantId, req.params.id, version.rows[0].version, title, text, sha256(text), req.auth.userId, validity]
+    `INSERT INTO student_contracts(tenant_id,student_id,version,title,contract_text,contract_hash,issued_by_user_id,expires_at,verification_token)
+     VALUES($1,$2,$3,$4,$5,$6,$7,now()+($8::text||' days')::interval,$9) RETURNING *`,
+    [req.auth.tenantId, req.params.id, version.rows[0].version, title, text, sha256(text), req.auth.userId, validity, crypto.randomBytes(24).toString('base64url')]
   );
   await logAudit(req, 'emitir_contrato', 'student_contract', created.rows[0].id,
     { student_id: req.params.id, version: created.rows[0].version, contract_hash: created.rows[0].contract_hash });
@@ -1061,12 +1188,40 @@ app.post('/api/students/:id/contracts', authMiddleware, requireRole('admin'), as
   res.status(201).json(created.rows[0]);
 });
 
+app.post('/api/contracts/:id/challenge', authMiddleware, requireRole('parent'), async (req, res) => {
+  const allowed = await db.query(
+    `SELECT c.id FROM student_contracts c JOIN student_guardians sg ON sg.student_id=c.student_id
+      WHERE c.id=$1 AND c.tenant_id=$2 AND c.status='pending' AND sg.guardian_user_id=$3`,
+    [req.params.id, req.auth.tenantId, req.auth.userId]
+  );
+  if (!allowed.rows.length) return res.status(403).json({ error: 'contrato nao disponivel para assinatura' });
+  const code = String(crypto.randomInt(100000, 1000000));
+  const codeHash = sha256(`${req.params.id}|${req.auth.userId}|${code}|${process.env.JWT_SECRET}`);
+  await db.query(
+    `UPDATE contract_signing_challenges SET consumed_at=now()
+      WHERE contract_id=$1 AND user_id=$2 AND consumed_at IS NULL`, [req.params.id, req.auth.userId]
+  );
+  await db.query(
+    `INSERT INTO contract_signing_challenges(tenant_id,contract_id,user_id,code_hash,expires_at)
+     VALUES($1,$2,$3,$4,now()+interval '10 minutes')`,
+    [req.auth.tenantId, req.params.id, req.auth.userId, codeHash]
+  );
+  push.sendToUsers([req.auth.userId], 'Codigo para assinar contrato',
+    `Seu codigo de confirmacao e ${code}. Ele vence em 10 minutos.`,
+    { type: 'contract_code', contractId: req.params.id }
+  ).catch((error) => console.error('[push codigo contrato]', error.message));
+  res.json({ ok: true, expiresInMinutes: 10,
+    ...(process.env.NODE_ENV !== 'production' ? { devCode: code } : {}) });
+});
+
 app.post('/api/contracts/:id/sign', authMiddleware, requireRole('parent'), async (req, res) => {
   if (req.body.accepted !== true) return res.status(400).json({ error: 'confirme a leitura e o aceite do contrato' });
   const signerName = String(req.body.signer_name || '').trim();
   if (signerName.length < 3 || signerName.length > 160) return res.status(400).json({ error: 'informe o nome completo do responsavel' });
   if (!validCpf(req.body.cpf)) return res.status(400).json({ error: 'informe um CPF valido' });
   if (typeof req.body.password !== 'string' || !req.body.password) return res.status(400).json({ error: 'confirme sua senha' });
+  const verificationCode = String(req.body.verification_code || '').trim();
+  if (!/^\d{6}$/.test(verificationCode)) return res.status(400).json({ error: 'informe o codigo de 6 digitos' });
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -1083,6 +1238,23 @@ app.post('/api/contracts/:id/sign', authMiddleware, requireRole('parent'), async
     if (c.status !== 'pending') { await client.query('ROLLBACK'); return res.status(409).json({ error: c.status === 'signed' ? 'contrato ja assinado' : 'contrato revogado' }); }
     if (c.expires_at && new Date(c.expires_at) < new Date()) { await client.query('ROLLBACK'); return res.status(410).json({ error: 'contrato expirado; solicite uma nova emissao' }); }
     if (!(await bcrypt.compare(req.body.password, c.password_hash))) { await client.query('ROLLBACK'); return res.status(401).json({ error: 'senha incorreta' }); }
+    const challenge = await client.query(
+      `SELECT * FROM contract_signing_challenges WHERE contract_id=$1 AND user_id=$2
+        AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+      [c.id, req.auth.userId]
+    );
+    if (!challenge.rows.length || new Date(challenge.rows[0].expires_at) < new Date()) {
+      await client.query('ROLLBACK'); return res.status(410).json({ error: 'codigo expirado; solicite outro' });
+    }
+    if (challenge.rows[0].attempts >= 5) {
+      await client.query('ROLLBACK'); return res.status(429).json({ error: 'limite de tentativas atingido; solicite outro codigo' });
+    }
+    const expectedCodeHash = sha256(`${c.id}|${req.auth.userId}|${verificationCode}|${process.env.JWT_SECRET}`);
+    if (!crypto.timingSafeEqual(Buffer.from(challenge.rows[0].code_hash), Buffer.from(expectedCodeHash))) {
+      await client.query(`UPDATE contract_signing_challenges SET attempts=attempts+1,
+        consumed_at=CASE WHEN attempts+1>=5 THEN now() ELSE consumed_at END WHERE id=$1`, [challenge.rows[0].id]);
+      await client.query('COMMIT'); return res.status(401).json({ error: 'codigo incorreto' });
+    }
     if (sha256(c.contract_text) !== c.contract_hash) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'integridade do contrato invalida' }); }
     const signedAt = new Date();
     const ip = req.ip || req.socket.remoteAddress || null;
@@ -1095,8 +1267,9 @@ app.post('/api/contracts/:id/sign', authMiddleware, requireRole('parent'), async
               signer_email=$3, signer_relationship=$4, signed_at=$5, signer_ip=$6,
               signer_user_agent=$7, acceptance_text=$8, evidence_hash=$9, signer_cpf=$10
         WHERE id=$11 RETURNING *`,
-      [req.auth.userId, signerName, c.email, c.relationship, signedAt, ip, userAgent, acceptance, evidenceHash, cpf, c.id]
+      [req.auth.userId, signerName, c.email, c.relationship, signedAt, ip, userAgent, acceptance, evidenceHash, encryptCpf(cpf), c.id]
     );
+    await client.query('UPDATE contract_signing_challenges SET consumed_at=now() WHERE id=$1', [challenge.rows[0].id]);
     await client.query(
       `INSERT INTO audit_log(tenant_id,actor_user_id,action,entity_type,entity_id,detail)
        VALUES($1,$2,'assinar_contrato','student_contract',$3,$4)`,
@@ -1125,6 +1298,69 @@ app.post('/api/contracts/:id/revoke', authMiddleware, requireRole('admin'), asyn
   res.json({ ok: true });
 });
 
+app.post('/api/contracts/:id/cancellation-request', authMiddleware, requireRole('parent'), async (req, res) => {
+  const reason = String(req.body.reason || '').trim();
+  if (reason.length < 10 || reason.length > 1000) return res.status(400).json({ error: 'descreva o motivo com pelo menos 10 caracteres' });
+  const allowed = await db.query(
+    `SELECT c.id FROM student_contracts c JOIN student_guardians sg ON sg.student_id=c.student_id
+      WHERE c.id=$1 AND c.tenant_id=$2 AND c.status='signed' AND sg.guardian_user_id=$3`,
+    [req.params.id, req.auth.tenantId, req.auth.userId]
+  );
+  if (!allowed.rows.length) return res.status(403).json({ error: 'contrato nao disponivel para cancelamento' });
+  try {
+    const created = await db.query(
+      `INSERT INTO contract_cancellation_requests(tenant_id,contract_id,requested_by,reason)
+       VALUES($1,$2,$3,$4) RETURNING id,status,requested_at`,
+      [req.auth.tenantId, req.params.id, req.auth.userId, reason]
+    );
+    const admins = await db.query(`SELECT id FROM users WHERE tenant_id=$1 AND role='admin' AND active=true`, [req.auth.tenantId]);
+    push.sendToUsers(admins.rows.map((row) => row.id), 'Solicitacao de cancelamento',
+      'Um responsavel solicitou o cancelamento de um contrato.', { type: 'contract_cancellation', contractId: req.params.id }
+    ).catch((error) => console.error('[push cancelamento contrato]', error.message));
+    res.status(201).json(created.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'ja existe uma solicitacao pendente' });
+    throw error;
+  }
+});
+
+app.get('/api/contracts/cancellation-requests', authMiddleware, requireRole('admin'), async (req, res) => {
+  const result = await db.query(
+    `SELECT cr.*,s.name AS student_name,u.name AS requester_name
+       FROM contract_cancellation_requests cr JOIN student_contracts c ON c.id=cr.contract_id
+       JOIN students s ON s.id=c.student_id LEFT JOIN users u ON u.id=cr.requested_by
+      WHERE cr.tenant_id=$1 ORDER BY CASE cr.status WHEN 'pending' THEN 0 ELSE 1 END,cr.requested_at DESC`,
+    [req.auth.tenantId]
+  );
+  res.json(result.rows);
+});
+
+app.post('/api/contracts/cancellation-requests/:id/resolve', authMiddleware, requireRole('admin'), async (req, res) => {
+  const decision = req.body.decision;
+  if (!['approved','rejected'].includes(decision)) return res.status(400).json({ error: 'decisao invalida' });
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const updated = await client.query(
+      `UPDATE contract_cancellation_requests SET status=$1,resolved_at=now(),resolved_by=$2,resolution_notes=$3
+        WHERE id=$4 AND tenant_id=$5 AND status='pending' RETURNING contract_id,requested_by`,
+      [decision, req.auth.userId, String(req.body.notes || '').trim() || null, req.params.id, req.auth.tenantId]
+    );
+    if (!updated.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'solicitacao pendente nao encontrada' }); }
+    if (decision === 'approved') await client.query(
+      `UPDATE student_contracts SET status='revoked',revoked_at=now(),revoked_by_user_id=$1,
+              revocation_reason='Cancelamento solicitado pelo responsavel e aprovado pelo administrador'
+        WHERE id=$2 AND status='signed'`, [req.auth.userId, updated.rows[0].contract_id]
+    );
+    await client.query('COMMIT');
+    push.sendToUsers([updated.rows[0].requested_by], 'Solicitacao de cancelamento',
+      decision === 'approved' ? 'Seu pedido foi aprovado.' : 'Seu pedido foi analisado e nao foi aprovado.',
+      { type: 'contract_cancellation_result', contractId: updated.rows[0].contract_id }
+    ).catch((error) => console.error('[push resultado cancelamento]', error.message));
+    res.json({ ok: true });
+  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+});
+
 async function loadContractForUser(req, contractId) {
   const result = await db.query(
     `SELECT c.*, s.name AS student_name, t.name AS tenant_name,
@@ -1140,8 +1376,25 @@ async function loadContractForUser(req, contractId) {
   if (!result.rows.length) return null;
   const row = result.rows[0];
   if (req.auth.role !== 'admin' && !(req.auth.role === 'parent' && row.current_relationship)) return null;
+  if (!row.verification_token) {
+    row.verification_token = crypto.randomBytes(24).toString('base64url');
+    await db.query('UPDATE student_contracts SET verification_token=$1 WHERE id=$2', [row.verification_token, row.id]);
+  }
   return row;
 }
+
+app.get('/contracts/verify/:token', async (req, res) => {
+  const result = await db.query(
+    `SELECT c.id,c.version,c.title,c.status,c.contract_text,c.contract_hash,c.evidence_hash,
+            c.issued_at,c.signed_at,c.revoked_at
+       FROM student_contracts c WHERE c.verification_token=$1`, [req.params.token]
+  );
+  if (!result.rows.length) return res.status(404).send('Comprovante nao encontrado.');
+  const c = result.rows[0];
+  const valid = sha256(c.contract_text) === c.contract_hash;
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Verificar contrato</title><style>body{font-family:system-ui;background:#f5f7f8;margin:0;padding:24px;color:#202124}.card{max-width:680px;margin:40px auto;background:white;padding:28px;border-radius:20px;box-shadow:0 12px 40px #0001}.ok{color:#087f5b}.bad{color:#c92a2a}code{word-break:break-all;background:#f1f3f5;padding:8px;display:block;border-radius:8px}</style></head><body><main class="card"><h1>VaiEscolar</h1><h2 class="${valid ? 'ok' : 'bad'}">${valid ? 'Documento autentico' : 'Falha de integridade'}</h2><p>Status: <strong>${c.status}</strong> - Versao ${c.version}</p><p>Emitido em: ${pdfDate(c.issued_at)}${c.signed_at ? `<br>Assinado em: ${pdfDate(c.signed_at)} (Brasilia)` : ''}</p><p>Hash SHA-256 do documento:</p><code>${c.contract_hash}</code>${c.evidence_hash ? `<p>Hash SHA-256 das evidencias:</p><code>${c.evidence_hash}</code>` : ''}<p>Esta consulta confirma a integridade tecnica do registro sem expor CPF, nome, endereco ou outros dados pessoais.</p></main></body></html>`);
+});
 
 app.get('/api/contracts/:id/verify', authMiddleware, async (req, res) => {
   const contract = await loadContractForUser(req, req.params.id);
@@ -1150,7 +1403,7 @@ app.get('/api/contracts/:id/verify', authMiddleware, async (req, res) => {
   let evidenceValid = null;
   if (contract.status === 'signed') {
     const evidence = [contract.id, contract.contract_hash, contract.signed_by_user_id,
-      contract.signer_name, contract.signer_cpf, contract.signer_email,
+      contract.signer_name, decryptCpf(contract.signer_cpf), contract.signer_email,
       contract.signer_relationship, new Date(contract.signed_at).toISOString(),
       contract.signer_ip, contract.signer_user_agent, contract.acceptance_text].join('|');
     evidenceValid = sha256(evidence) === contract.evidence_hash;
@@ -1169,6 +1422,10 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
   const contract = await loadContractForUser(req, req.params.id);
   if (!contract) return res.status(403).json({ error: 'sem permissao' });
   if (sha256(contract.contract_text) !== contract.contract_hash) return res.status(409).json({ error: 'integridade do contrato invalida' });
+  const publicBase = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const verificationUrl = `${publicBase}/contracts/verify/${contract.verification_token}`;
+  const qrBuffer = await QRCode.toBuffer(verificationUrl, { type: 'png', width: 220, margin: 1,
+    color: { dark: '#0F5B66', light: '#FFFFFF' } });
   const filename = `contrato-${contract.student_name.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}-v${contract.version}.pdf`;
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `${req.query.download === '1' ? 'attachment' : 'inline'}; filename="${filename}"`);
@@ -1185,7 +1442,7 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
   doc.moveDown(.5).font('Helvetica').fontSize(9.5).fillColor('#202124');
   if (contract.status === 'signed') {
     doc.text(`Assinante: ${contract.signer_name}`);
-    doc.text(`CPF: ${maskedCpf(contract.signer_cpf)}   |   E-mail: ${contract.signer_email}`);
+    doc.text(`CPF: ${maskedCpf(decryptCpf(contract.signer_cpf))}   |   E-mail: ${contract.signer_email}`);
     doc.text(`Vinculo: ${contract.signer_relationship}   |   Data/hora: ${pdfDate(contract.signed_at)} (Brasilia)`);
     doc.text(`IP registrado: ${contract.signer_ip || 'nao informado'}`);
     doc.text(`Dispositivo: ${contract.signer_user_agent || 'nao informado'}`);
@@ -1195,6 +1452,14 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
   }
   doc.moveDown(1).font('Courier').fontSize(7.5).fillColor('#444444')
     .text(`HASH DO DOCUMENTO (SHA-256)\n${contract.contract_hash}\n\nHASH DAS EVIDENCIAS (SHA-256)\n${contract.evidence_hash || 'Ainda nao gerado'}`);
+  if (doc.y > 650) doc.addPage();
+  doc.moveDown(1).font('Helvetica-Bold').fontSize(10).fillColor('#0F5B66').text('Verifique a autenticidade');
+  const qrY = doc.y + 6;
+  doc.image(qrBuffer, 58, qrY, { width: 86 });
+  doc.font('Helvetica').fontSize(8).fillColor('#444444')
+    .text('Escaneie o QR Code para conferir os hashes diretamente no VaiEscolar. A pagina publica nao exibe dados pessoais.', 154, qrY + 18, { width: 380 });
+  doc.font('Courier').fontSize(6.5).text(verificationUrl, 154, qrY + 54, { width: 380 });
+  doc.y = qrY + 94;
   const pages = doc.bufferedPageRange();
   for (let i = 0; i < pages.count; i++) {
     doc.switchToPage(i);
