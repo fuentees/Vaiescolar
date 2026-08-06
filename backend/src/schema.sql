@@ -362,6 +362,39 @@ ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'avai
 ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 
+-- Contrato individual por aluno. Cada emissao guarda uma copia imutavel do
+-- texto; uma alteracao posterior gera nova versao e preserva a anterior.
+CREATE TABLE IF NOT EXISTS student_contracts (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id          UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  student_id         UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  version            INT NOT NULL,
+  title              TEXT NOT NULL,
+  contract_text      TEXT NOT NULL,
+  contract_hash      CHAR(64) NOT NULL,
+  status             TEXT NOT NULL DEFAULT 'pending'
+                       CHECK (status IN ('pending','signed','revoked')),
+  issued_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  issued_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  signed_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  signer_name        TEXT,
+  signer_email       TEXT,
+  signer_relationship TEXT,
+  signed_at          TIMESTAMPTZ,
+  signer_ip          INET,
+  signer_user_agent  TEXT,
+  acceptance_text    TEXT,
+  evidence_hash      CHAR(64),
+  revoked_at         TIMESTAMPTZ,
+  revoked_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  revocation_reason  TEXT,
+  UNIQUE (student_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_student_contracts_student
+  ON student_contracts(tenant_id, student_id, version DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_student_contracts_current
+  ON student_contracts(student_id) WHERE status IN ('pending','signed');
+
 -- Forma de pagamento (P1 fase 6) -- opcional, so preenchido quando marca como pago.
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method TEXT;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider TEXT;

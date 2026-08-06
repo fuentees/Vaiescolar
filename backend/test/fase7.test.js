@@ -112,6 +112,35 @@ test('GET /api/students/:id agora aceita o pai dono do aluno, mas rejeita outro 
   assert.equal(forbidden.status, 403);
 });
 
+test('contrato individual registra assinatura e evidencias imutaveis', async () => {
+  const issued = await post(`/api/students/${studentId}/contracts`, {}, adminToken);
+  assert.equal(issued.status, 201);
+  const contract = await issued.json();
+  assert.equal(contract.status, 'pending');
+  assert.equal(contract.contract_hash.length, 64);
+
+  const duplicate = await post(`/api/students/${studentId}/contracts`, {}, adminToken);
+  assert.equal(duplicate.status, 409);
+
+  const signedResponse = await post(`/api/contracts/${contract.id}/sign`, {
+    accepted: true, signer_name: 'Pai Fase Sete',
+  }, parentToken);
+  assert.equal(signedResponse.status, 200);
+  const signed = await signedResponse.json();
+  assert.equal(signed.status, 'signed');
+  assert.equal(signed.evidence_hash.length, 64);
+  assert.ok(signed.signer_ip);
+
+  const signedAgain = await post(`/api/contracts/${contract.id}/sign`, {
+    accepted: true, signer_name: 'Pai Fase Sete',
+  }, parentToken);
+  assert.equal(signedAgain.status, 409);
+
+  const list = await get(`/api/students/${studentId}/contracts`, parentToken).then((r) => r.json());
+  assert.equal(list[0].id, contract.id);
+  assert.equal(list[0].contract_hash, contract.contract_hash);
+});
+
 test('conta de responsavel existente adiciona outro aluno usando a senha atual', async () => {
   const second = await post('/api/students', { name: 'Irma do Aluno Fase7' }, adminToken).then((r) => r.json());
   const invite = await post(`/api/students/${second.id}/invite`, { relationship: 'Pai' }, adminToken).then((r) => r.json());

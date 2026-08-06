@@ -866,6 +866,50 @@ class Api {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  static Future<List<dynamic>> studentContracts(String studentId) async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/students/$studentId/contracts'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) return [];
+    return jsonDecode(res.body) as List<dynamic>;
+  }
+
+  static Future<String?> issueStudentContract(String studentId) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/students/$studentId/contracts'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({}),
+    );
+    if (res.statusCode == 201) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel emitir o contrato.';
+    }
+  }
+
+  static Future<String?> revokeContract(
+      String contractId, String reason) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/contracts/$contractId/revoke'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+    if (res.statusCode == 200) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel revogar o contrato.';
+    }
+  }
+
   // ---------------------------------------------------------------------
   // Escolas
   // ---------------------------------------------------------------------

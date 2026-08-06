@@ -57,6 +57,7 @@ async function logAudit(req, action, entityType, entityId, detail) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 // Apps mobile nao sao afetados por CORS (so navegadores aplicam essa
 // politica) -- fica configuravel via env pra quando/se existir um painel
 // web administrativo que precise ser restrito a uma origem especifica.
@@ -79,14 +80,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.25', buildNumber: 4031, releaseBuild: 31,
+      version: '1.0.26', buildNumber: 4032, releaseBuild: 32,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Operacao diaria reforcada: dias, varias vans, faltas, duplicidades, recebedores e alertas preventivos.',
+      notes: 'Contrato individual por aluno com assinatura eletronica, IP e hashes de integridade.',
     },
     responsavel: {
-      version: '1.0.25', buildNumber: 4031, releaseBuild: 31,
+      version: '1.0.26', buildNumber: 4032, releaseBuild: 32,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Operacao diaria reforcada: dias, varias vans, faltas, duplicidades, recebedores e alertas preventivos.',
+      notes: 'Contrato individual por aluno com assinatura eletronica, IP e hashes de integridade.',
     },
   };
   const version = versions[req.params.app];
@@ -884,6 +885,156 @@ app.get('/api/students/:id', authMiddleware, async (req, res) => {
   ) : { rows: [] };
 
   res.json({ ...s.rows[0], guardians: guardians.rows, payments: payments.rows, invites: invites.rows });
+});
+
+/* =========================================================================
+ * CONTRATOS POR ALUNO
+ * ========================================================================= */
+
+const DEFAULT_CONTRACT_TEXT = `CONTRATO DE PRESTACAO DE SERVICO DE TRANSPORTE ESCOLAR
+
+O CONTRATADO compromete-se a prestar o transporte escolar do ALUNO identificado neste contrato, nos dias, horarios, enderecos e escolas cadastrados no aplicativo, observadas as condicoes operacionais combinadas entre as partes.
+
+O RESPONSAVEL declara que os dados do aluno, contatos de emergencia, pessoas autorizadas e informacoes relevantes de saude foram informados corretamente e se compromete a mante-los atualizados.
+
+Faltas, mudancas de endereco, alteracoes de horario e situacoes excepcionais devem ser comunicadas pelos canais disponibilizados. A mensalidade, vencimento, reajustes, ferias, cancelamento e demais condicoes comerciais seguem o que estiver preenchido neste instrumento e acordado entre as partes.
+
+O acompanhamento por GPS e as notificacoes sao recursos auxiliares e podem sofrer variacoes por sinal, bateria, internet ou disponibilidade dos servicos de terceiros. Eles nao substituem a comunicacao direta em emergencias.
+
+Os dados pessoais serao tratados para executar o transporte, manter a seguranca do aluno, comunicar ocorrencias, cumprir obrigacoes legais e preservar evidencias desta contratacao, conforme a legislacao aplicavel e a politica de privacidade.
+
+Ao assinar eletronicamente, o RESPONSAVEL confirma que leu integralmente o documento, concorda com suas condicoes e reconhece como evidencias a identidade da conta autenticada, data e hora, endereco IP, identificacao do dispositivo e os hashes de integridade registrados pelo sistema.`;
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+}
+
+async function contractAccess(req, studentId) {
+  if (req.auth.role === 'admin') {
+    const found = await db.query('SELECT id FROM students WHERE id=$1 AND tenant_id=$2', [studentId, req.auth.tenantId]);
+    return found.rows.length > 0;
+  }
+  if (req.auth.role !== 'parent') return false;
+  const found = await db.query(
+    `SELECT 1 FROM student_guardians WHERE student_id=$1 AND guardian_user_id=$2 AND tenant_id=$3`,
+    [studentId, req.auth.userId, req.auth.tenantId]
+  );
+  return found.rows.length > 0;
+}
+
+app.get('/api/students/:id/contracts', authMiddleware, async (req, res) => {
+  if (!(await contractAccess(req, req.params.id))) return res.status(403).json({ error: 'sem permissao' });
+  const result = await db.query(
+    `SELECT c.id, c.student_id, c.version, c.title, c.contract_text, c.contract_hash,
+            c.status, c.issued_at, c.signer_name, c.signer_email,
+            c.signer_relationship, c.signed_at, host(c.signer_ip) AS signer_ip,
+            c.signer_user_agent, c.acceptance_text, c.evidence_hash,
+            c.revoked_at, c.revocation_reason, s.name AS student_name,
+            t.name AS tenant_name
+       FROM student_contracts c
+       JOIN students s ON s.id=c.student_id
+       JOIN tenants t ON t.id=c.tenant_id
+      WHERE c.student_id=$1 AND c.tenant_id=$2
+      ORDER BY c.version DESC`,
+    [req.params.id, req.auth.tenantId]
+  );
+  res.json(result.rows);
+});
+
+app.post('/api/students/:id/contracts', authMiddleware, requireRole('admin'), async (req, res) => {
+  const student = await db.query(
+    `SELECT s.id, s.name, t.name AS tenant_name FROM students s JOIN tenants t ON t.id=s.tenant_id
+      WHERE s.id=$1 AND s.tenant_id=$2`, [req.params.id, req.auth.tenantId]
+  );
+  if (!student.rows.length) return res.status(404).json({ error: 'aluno nao encontrado' });
+  const existing = await db.query(
+    `SELECT id, status FROM student_contracts WHERE student_id=$1 AND tenant_id=$2
+      AND status IN ('pending','signed') LIMIT 1`, [req.params.id, req.auth.tenantId]
+  );
+  if (existing.rows.length) {
+    return res.status(409).json({ error: 'este aluno ja possui um contrato vigente; revogue-o antes de emitir uma nova versao' });
+  }
+  const title = String(req.body.title || `Contrato de transporte escolar - ${student.rows[0].name}`).trim();
+  const generatedText = `CONTRATADO: ${student.rows[0].tenant_name}\nALUNO: ${student.rows[0].name}\n\n${DEFAULT_CONTRACT_TEXT}`;
+  const text = String(req.body.contract_text || generatedText).trim();
+  if (title.length < 5 || title.length > 160) return res.status(400).json({ error: 'titulo invalido' });
+  if (text.length < 200 || text.length > 30000) return res.status(400).json({ error: 'o contrato deve ter entre 200 e 30000 caracteres' });
+  const version = await db.query('SELECT COALESCE(max(version),0)+1 AS version FROM student_contracts WHERE student_id=$1', [req.params.id]);
+  const created = await db.query(
+    `INSERT INTO student_contracts(tenant_id,student_id,version,title,contract_text,contract_hash,issued_by_user_id)
+     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [req.auth.tenantId, req.params.id, version.rows[0].version, title, text, sha256(text), req.auth.userId]
+  );
+  await logAudit(req, 'emitir_contrato', 'student_contract', created.rows[0].id,
+    { student_id: req.params.id, version: created.rows[0].version, contract_hash: created.rows[0].contract_hash });
+  const guardians = await db.query(
+    'SELECT guardian_user_id AS id FROM student_guardians WHERE student_id=$1 AND tenant_id=$2',
+    [req.params.id, req.auth.tenantId]
+  );
+  push.sendToUsers(guardians.rows.map((row) => row.id), 'Contrato disponivel',
+    `O contrato de ${student.rows[0].name} esta aguardando sua assinatura.`,
+    { type: 'contract', studentId: req.params.id, contractId: created.rows[0].id }
+  ).catch((error) => console.error('[push contrato]', error.message));
+  res.status(201).json(created.rows[0]);
+});
+
+app.post('/api/contracts/:id/sign', authMiddleware, requireRole('parent'), async (req, res) => {
+  if (req.body.accepted !== true) return res.status(400).json({ error: 'confirme a leitura e o aceite do contrato' });
+  const signerName = String(req.body.signer_name || '').trim();
+  if (signerName.length < 3 || signerName.length > 160) return res.status(400).json({ error: 'informe o nome completo do responsavel' });
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const contract = await client.query(
+      `SELECT c.*, sg.relationship, u.email
+         FROM student_contracts c
+         JOIN student_guardians sg ON sg.student_id=c.student_id AND sg.guardian_user_id=$1
+         JOIN users u ON u.id=$1
+        WHERE c.id=$2 AND c.tenant_id=$3 FOR UPDATE`,
+      [req.auth.userId, req.params.id, req.auth.tenantId]
+    );
+    if (!contract.rows.length) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'sem permissao' }); }
+    const c = contract.rows[0];
+    if (c.status !== 'pending') { await client.query('ROLLBACK'); return res.status(409).json({ error: c.status === 'signed' ? 'contrato ja assinado' : 'contrato revogado' }); }
+    if (sha256(c.contract_text) !== c.contract_hash) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'integridade do contrato invalida' }); }
+    const signedAt = new Date();
+    const ip = req.ip || req.socket.remoteAddress || null;
+    const userAgent = String(req.get('user-agent') || 'nao informado').slice(0, 1000);
+    const acceptance = 'Li integralmente o contrato, concordo com suas condicoes e assino eletronicamente como responsavel pelo aluno.';
+    const evidenceHash = sha256([c.id, c.contract_hash, req.auth.userId, signerName, c.email, c.relationship, signedAt.toISOString(), ip, userAgent, acceptance].join('|'));
+    const updated = await client.query(
+      `UPDATE student_contracts SET status='signed', signed_by_user_id=$1, signer_name=$2,
+              signer_email=$3, signer_relationship=$4, signed_at=$5, signer_ip=$6,
+              signer_user_agent=$7, acceptance_text=$8, evidence_hash=$9
+        WHERE id=$10 RETURNING *`,
+      [req.auth.userId, signerName, c.email, c.relationship, signedAt, ip, userAgent, acceptance, evidenceHash, c.id]
+    );
+    await client.query(
+      `INSERT INTO audit_log(tenant_id,actor_user_id,action,entity_type,entity_id,detail)
+       VALUES($1,$2,'assinar_contrato','student_contract',$3,$4)`,
+      [req.auth.tenantId, req.auth.userId, c.id,
+        JSON.stringify({ student_id: c.student_id, version: c.version, evidence_hash: evidenceHash })]
+    );
+    await client.query('COMMIT');
+    res.json(updated.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+});
+
+app.post('/api/contracts/:id/revoke', authMiddleware, requireRole('admin'), async (req, res) => {
+  const reason = String(req.body.reason || '').trim();
+  if (reason.length < 5 || reason.length > 500) return res.status(400).json({ error: 'informe o motivo da revogacao' });
+  const updated = await db.query(
+    `UPDATE student_contracts SET status='revoked', revoked_at=now(), revoked_by_user_id=$1, revocation_reason=$2
+      WHERE id=$3 AND tenant_id=$4 AND status IN ('pending','signed') RETURNING id,student_id,version`,
+    [req.auth.userId, reason, req.params.id, req.auth.tenantId]
+  );
+  if (!updated.rows.length) return res.status(404).json({ error: 'contrato vigente nao encontrado' });
+  await logAudit(req, 'revogar_contrato', 'student_contract', req.params.id,
+    { student_id: updated.rows[0].student_id, version: updated.rows[0].version, reason });
+  res.json({ ok: true });
 });
 
 /* =========================================================================

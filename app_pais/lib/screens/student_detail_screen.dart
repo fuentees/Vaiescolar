@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../theme.dart';
 import 'trip_history_screen.dart';
+import 'contract_screen.dart';
 
 String _formatMonth(String iso) {
   const names = [
@@ -191,6 +192,15 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
               );
             }),
           const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ContractScreen(
+                  studentId: widget.studentId, studentName: widget.name),
+            )),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('Ver e assinar contrato'),
+          ),
+          const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(

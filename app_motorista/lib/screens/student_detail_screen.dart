@@ -3,6 +3,7 @@ import '../services/api.dart';
 import '../theme.dart';
 import 'invite_screen.dart';
 import 'chat_screen.dart';
+import 'student_contract_screen.dart';
 
 const _monthNames = [
   'Jan',
@@ -181,6 +182,23 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                                   subtitle: Text(i['relationship'] as String),
                                 )),
                       ],
+                      const SizedBox(height: 20),
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.description_outlined),
+                          title: const Text('Contrato individual'),
+                          subtitle: const Text(
+                              'Emitir, acompanhar assinatura e consultar evidencias'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () =>
+                              Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => StudentContractScreen(
+                              studentId: widget.studentId,
+                              studentName: s['name'] as String,
+                            ),
+                          )),
+                        ),
+                      ),
                       const SizedBox(height: 20),
                       Text('Pagamentos',
                           style: Theme.of(context).textTheme.titleMedium),

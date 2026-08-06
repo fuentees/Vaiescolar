@@ -318,6 +318,33 @@ class Api {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  static Future<List<dynamic>> studentContracts(String studentId) async {
+    final res = await http.get(
+      Uri.parse('${Config.apiBase}/api/students/$studentId/contracts'),
+      headers: {'authorization': 'Bearer $_token'},
+    );
+    if (res.statusCode != 200) return [];
+    return jsonDecode(res.body) as List<dynamic>;
+  }
+
+  static Future<String?> signContract(
+      String contractId, String signerName) async {
+    final res = await http.post(
+      Uri.parse('${Config.apiBase}/api/contracts/$contractId/sign'),
+      headers: {
+        'authorization': 'Bearer $_token',
+        'content-type': 'application/json'
+      },
+      body: jsonEncode({'accepted': true, 'signer_name': signerName}),
+    );
+    if (res.statusCode == 200) return null;
+    try {
+      return jsonDecode(res.body)['error'] as String?;
+    } catch (_) {
+      return 'Nao foi possivel assinar o contrato.';
+    }
+  }
+
   /// Vincula outro filho a conta ja logada usando um segundo codigo de
   /// convite (diferente de [registerWithCode], que so serve pra criar a
   /// primeira conta). Retorna null em caso de sucesso, ou uma mensagem de erro.
