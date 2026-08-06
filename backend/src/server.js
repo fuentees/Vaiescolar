@@ -82,14 +82,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.28', buildNumber: 4034, releaseBuild: 34,
+      version: '1.0.29', buildNumber: 4035, releaseBuild: 35,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contratos reforcados: CPF cifrado, codigo de confirmacao, QR publico, lembretes e operacoes em lote.',
+      notes: 'Contrato identifica diretamente aluno, responsavel e CPF do assinante.',
     },
     responsavel: {
-      version: '1.0.28', buildNumber: 4034, releaseBuild: 34,
+      version: '1.0.29', buildNumber: 4035, releaseBuild: 35,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contratos reforcados: CPF cifrado, codigo de confirmacao, QR publico, lembretes e operacoes em lote.',
+      notes: 'Contrato identifica diretamente aluno, responsavel e CPF do assinante.',
     },
   };
   const version = versions[req.params.app];
@@ -936,6 +936,13 @@ function maskedCpf(value) {
   return `***.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-**`;
 }
 
+function formatCpf(value) {
+  const cpf = String(value || '').replace(/\D/g, '');
+  return cpf.length === 11
+    ? `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`
+    : 'nao informado';
+}
+
 function encryptCpf(value) {
   return `enc:${encryptPaymentSecret(String(value).replace(/\D/g, ''))}`;
 }
@@ -983,6 +990,9 @@ app.get('/api/students/:id/contracts', authMiddleware, async (req, res) => {
             c.revoked_at, c.revocation_reason, c.expires_at,
             c.first_downloaded_at, c.download_count,
             s.name AS student_name,
+            (SELECT string_agg(gu.name, ', ' ORDER BY gu.name)
+               FROM student_guardians gsg JOIN users gu ON gu.id=gsg.guardian_user_id
+              WHERE gsg.student_id=c.student_id) AS guardian_names,
             t.name AS tenant_name
        FROM student_contracts c
        JOIN students s ON s.id=c.student_id
@@ -992,6 +1002,8 @@ app.get('/api/students/:id/contracts', authMiddleware, async (req, res) => {
     [req.params.id, req.auth.tenantId]
   );
   res.json(result.rows.map((row) => ({ ...row,
+    responsible_name: row.signer_name || row.guardian_names || 'nao informado',
+    signer_cpf_display: row.signer_cpf ? formatCpf(decryptCpf(row.signer_cpf)) : null,
     signer_cpf_masked: row.signer_cpf ? maskedCpf(decryptCpf(row.signer_cpf)) : null,
     signer_cpf: undefined,
   })));
@@ -1103,7 +1115,7 @@ app.post('/api/contracts/bulk-issue', authMiddleware, requireRole('admin'), asyn
     };
     let body = t.contract_template || DEFAULT_CONTRACT_TEXT;
     for (const [key, value] of Object.entries(values)) body = body.split(key).join(value);
-    const text = `CONTRATADO: ${values['{{TRANSPORTADOR}}']}\nCPF/CNPJ: ${values['{{CPF_CNPJ_TRANSPORTADOR}}']}\nENDERECO: ${values['{{ENDERECO_TRANSPORTADOR}}']}\nALUNO: ${student.name}\n\n${body}`;
+    const text = `CONTRATANTE/RESPONSAVEL: ${values['{{RESPONSAVEL}}']}\nCPF DO RESPONSAVEL: registrado no ato da assinatura\nALUNO: ${student.name}\n\nCONTRATADO: ${values['{{TRANSPORTADOR}}']}\nCPF/CNPJ: ${values['{{CPF_CNPJ_TRANSPORTADOR}}']}\nENDERECO: ${values['{{ENDERECO_TRANSPORTADOR}}']}\n\n${body}`;
     const version = await db.query('SELECT COALESCE(max(version),0)+1 AS version FROM student_contracts WHERE student_id=$1', [student.id]);
     const inserted = await db.query(
       `INSERT INTO student_contracts(tenant_id,student_id,version,title,contract_text,contract_hash,issued_by_user_id,expires_at,verification_token)
@@ -1163,7 +1175,7 @@ app.post('/api/students/:id/contracts', authMiddleware, requireRole('admin'), as
   };
   let templateText = party.contract_template || DEFAULT_CONTRACT_TEXT;
   for (const [placeholder, value] of Object.entries(values)) templateText = templateText.split(placeholder).join(value);
-  const generatedText = `CONTRATADO: ${values['{{TRANSPORTADOR}}']}\nCPF/CNPJ: ${values['{{CPF_CNPJ_TRANSPORTADOR}}']}\nENDERECO: ${values['{{ENDERECO_TRANSPORTADOR}}']}\nALUNO: ${party.name}\n\n${templateText}`;
+  const generatedText = `CONTRATANTE/RESPONSAVEL: ${values['{{RESPONSAVEL}}']}\nCPF DO RESPONSAVEL: registrado no ato da assinatura\nALUNO: ${party.name}\n\nCONTRATADO: ${values['{{TRANSPORTADOR}}']}\nCPF/CNPJ: ${values['{{CPF_CNPJ_TRANSPORTADOR}}']}\nENDERECO: ${values['{{ENDERECO_TRANSPORTADOR}}']}\n\n${templateText}`;
   const text = String(req.body.contract_text || generatedText).trim();
   if (title.length < 5 || title.length > 160) return res.status(400).json({ error: 'titulo invalido' });
   if (text.length < 200 || text.length > 30000) return res.status(400).json({ error: 'o contrato deve ter entre 200 e 30000 caracteres' });
@@ -1365,7 +1377,10 @@ async function loadContractForUser(req, contractId) {
   const result = await db.query(
     `SELECT c.*, s.name AS student_name, t.name AS tenant_name,
             t.legal_name,t.tax_id,t.legal_address,u.email AS account_email,
-            sg.relationship AS current_relationship
+            sg.relationship AS current_relationship,
+            (SELECT string_agg(gu.name, ', ' ORDER BY gu.name)
+               FROM student_guardians gsg JOIN users gu ON gu.id=gsg.guardian_user_id
+              WHERE gsg.student_id=c.student_id) AS guardian_names
        FROM student_contracts c
        JOIN students s ON s.id=c.student_id
        JOIN tenants t ON t.id=c.tenant_id
@@ -1437,12 +1452,17 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
   doc.moveDown(.3).fillColor('#202124').fontSize(15).text(contract.title, { align: 'center' });
   doc.moveDown(.4).font('Helvetica').fontSize(9).fillColor('#666666')
     .text(`Aluno: ${contract.student_name}   |   Versao: ${contract.version}   |   Emitido em: ${pdfDate(contract.issued_at)}`, { align: 'center' });
+  doc.moveDown(1).font('Helvetica-Bold').fontSize(10.5).fillColor('#202124').text('Identificacao das partes');
+  doc.font('Helvetica').fontSize(10)
+    .text(`Aluno: ${contract.student_name}`)
+    .text(`Responsavel: ${contract.signer_name || contract.guardian_names || 'nao informado'}`)
+    .text(`CPF do responsavel: ${contract.signer_cpf ? formatCpf(decryptCpf(contract.signer_cpf)) : 'sera registrado no ato da assinatura'}`);
   doc.moveDown(1.5).fillColor('#202124').fontSize(10.5).text(contract.contract_text, { align: 'justify', lineGap: 3 });
   doc.moveDown(1.5).font('Helvetica-Bold').fontSize(12).fillColor('#0F5B66').text('Comprovante da assinatura eletronica');
   doc.moveDown(.5).font('Helvetica').fontSize(9.5).fillColor('#202124');
   if (contract.status === 'signed') {
     doc.text(`Assinante: ${contract.signer_name}`);
-    doc.text(`CPF: ${maskedCpf(decryptCpf(contract.signer_cpf))}   |   E-mail: ${contract.signer_email}`);
+    doc.text(`CPF: ${formatCpf(decryptCpf(contract.signer_cpf))}   |   E-mail: ${contract.signer_email}`);
     doc.text(`Vinculo: ${contract.signer_relationship}   |   Data/hora: ${pdfDate(contract.signed_at)} (Brasilia)`);
     doc.text(`IP registrado: ${contract.signer_ip || 'nao informado'}`);
     doc.text(`Dispositivo: ${contract.signer_user_agent || 'nao informado'}`);

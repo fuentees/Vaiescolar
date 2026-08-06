@@ -154,6 +154,11 @@ test('contrato individual registra assinatura e evidencias imutaveis', async () 
   const list = await get(`/api/students/${studentId}/contracts`, parentToken).then((r) => r.json());
   assert.equal(list[0].id, contract.id);
   assert.equal(list[0].contract_hash, contract.contract_hash);
+  assert.equal(list[0].student_name, 'Aluno Fase7');
+  assert.equal(list[0].responsible_name, 'Pai Fase Sete');
+  assert.equal(list[0].signer_cpf_display, '529.982.247-25');
+  assert.match(list[0].contract_text, /CONTRATANTE\/RESPONSAVEL:/);
+  assert.match(list[0].contract_text, /ALUNO: Aluno Fase7/);
 
   const verification = await get(`/api/contracts/${contract.id}/verify`, parentToken).then((r) => r.json());
   assert.equal(verification.contractValid, true);

@@ -196,6 +196,26 @@ class _ContractScreenState extends State<ContractScreen> {
                   Text('${widget.studentName} · versao ${current['version']}'),
                   const SizedBox(height: 16),
                   Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Identificacao do contrato',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 10),
+                          Text(
+                              'Aluno: ${current['student_name'] ?? widget.studentName}'),
+                          Text(
+                              'Responsavel: ${current['responsible_name'] ?? 'nao informado'}'),
+                          Text(
+                              'CPF: ${current['signer_cpf_display'] ?? 'sera registrado ao assinar'}'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
                       child: Padding(
                     padding: const EdgeInsets.all(18),
                     child: SelectableText(current['contract_text'] as String,
