@@ -17,7 +17,7 @@
 
 ## Capacidade
 
-- Homologar primeiro com `LOAD_CONCURRENCY=20 LOAD_DURATION_SECONDS=60 npm run load:test`.
+- Homologar primeiro com `LOAD_CONCURRENCY=20 LOAD_REQUESTS_PER_SECOND=20 LOAD_DURATION_SECONDS=60 npm run load:test`.
 - Repetir com 50 e 100 conexoes apenas fora do horario de uso.
 - Considerar aprovado quando erros forem inferiores a 1%, p95 estiver dentro da meta e o pool nao acumular espera.
 - Aumentar `DB_POOL_MAX` somente respeitando o limite total de conexoes do banco dividido pelas instancias do servidor.

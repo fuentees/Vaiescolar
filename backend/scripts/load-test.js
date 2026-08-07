@@ -3,9 +3,11 @@
 const baseUrl = String(process.env.LOAD_BASE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
 const concurrency = Math.min(200, Math.max(1, Number(process.env.LOAD_CONCURRENCY) || 20));
 const durationSeconds = Math.min(600, Math.max(5, Number(process.env.LOAD_DURATION_SECONDS) || 30));
+const requestsPerSecond = Math.min(2000, Math.max(1, Number(process.env.LOAD_REQUESTS_PER_SECOND) || 20));
 const target = `${baseUrl}${process.env.LOAD_PATH || '/health'}`;
 
 async function worker(deadline, totals) {
+  const minimumIntervalMs = Math.ceil((1000 * concurrency) / requestsPerSecond);
   while (Date.now() < deadline) {
     const started = performance.now();
     try {
@@ -17,6 +19,8 @@ async function worker(deadline, totals) {
       totals.failed += 1;
     }
     totals.latencies.push(performance.now() - started);
+    const remainingDelay = minimumIntervalMs - (performance.now() - started);
+    if (remainingDelay > 0) await new Promise((resolve) => setTimeout(resolve, remainingDelay));
   }
 }
 
@@ -29,8 +33,9 @@ async function main() {
   const percentile = (p) => totals.latencies[Math.min(totals.latencies.length - 1,
     Math.floor(totals.latencies.length * p))] || 0;
   const result = {
-    target, concurrency, durationSeconds, requests: totals.latencies.length,
-    requestsPerSecond: Number((totals.latencies.length / durationSeconds).toFixed(2)),
+    target, concurrency, durationSeconds, configuredRequestsPerSecond: requestsPerSecond,
+    requests: totals.latencies.length,
+    achievedRequestsPerSecond: Number((totals.latencies.length / durationSeconds).toFixed(2)),
     failed: totals.failed, statusCodes: totals.codes,
     latencyMs: { p50: Math.round(percentile(.5)), p95: Math.round(percentile(.95)), p99: Math.round(percentile(.99)) },
   };
