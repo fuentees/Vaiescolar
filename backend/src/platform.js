@@ -187,7 +187,7 @@ module.exports = function createPlatformRouter({ db, push, hub }) {
     const paymentUrl = String(req.body.payment_url || '').trim() || `${publicBase}/pay/${reference}`;
     const result = await db.query(`INSERT INTO platform_invoices(tenant_id,subscription_id,amount,status,due_at,description,provider,payment_url,external_reference)
       SELECT $1,id,$2,'pending',$3,$4,$5,$6,$7 FROM platform_subscriptions WHERE tenant_id=$1 RETURNING *`,
-      [req.body.tenant_id, amount, req.body.due_at || null, String(req.body.description || 'Assinatura VaiEscolar'),
+      [req.body.tenant_id, amount, req.body.due_at || null, String(req.body.description || 'Assinatura TECO'),
         req.body.provider || 'manual', paymentUrl, reference]);
     if (!result.rows.length) return res.status(409).json({ error: 'transportadora sem assinatura configurada' });
     await audit(req, 'gerar_fatura', 'invoice', result.rows[0].id, req.body.tenant_id, { amount, paymentUrl });

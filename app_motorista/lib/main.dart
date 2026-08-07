@@ -184,7 +184,7 @@ class VaiEscolarApp extends StatelessWidget {
       valueListenable: ThemeController.mode,
       builder: (context, mode, _) => MaterialApp(
         navigatorKey: navigatorKey,
-        title: 'VaiEscolar',
+        title: 'TECO',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),

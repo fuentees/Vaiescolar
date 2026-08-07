@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Paleta compartilhada da identidade VaiEscolar (mesma no app_pais).
+/// Design system TECO — Transporte Escolar Conectado.
 class AppColors {
   AppColors._();
 
-  static const primary = Color(0xFF0F6B6B);
-  static const accent = Color(0xFFF5A623);
-  static const success = Color(0xFF2E9E5B);
-  static const error = Color(0xFFD64545);
+  static const primary = Color(0xFF0F4C5C);
+  static const cyan = Color(0xFF2BB3C0);
+  static const accent = Color(0xFFF4B942);
+  static const success = Color(0xFF22A06B);
+  static const warning = Color(0xFFF4B942);
+  static const error = Color(0xFFD94C57);
 
-  static const lightBg = Color(0xFFF7F9FA);
+  static const lightBg = Color(0xFFF3F4F6);
   static const lightSurface = Colors.white;
-  static const lightText = Color(0xFF1C2B2B);
+  static const lightText = Color(0xFF1F2937);
 
-  static const darkBg = Color(0xFF0E1514);
-  static const darkSurface = Color(0xFF16201F);
-  static const darkText = Color(0xFFE6EFEE);
+  static const darkBg = Color(0xFF071E26);
+  static const darkSurface = Color(0xFF0D3440);
+  static const darkText = Color(0xFFF3F4F6);
 }
 
 /// Material 3 + Manrope + dark mode. App do motorista prioriza contraste alto
@@ -38,13 +40,14 @@ class AppTheme {
       brightness: brightness,
     ).copyWith(
       primary: AppColors.primary,
-      secondary: AppColors.accent,
+      secondary: AppColors.cyan,
+      tertiary: AppColors.accent,
       error: AppColors.error,
       surface: surface,
     );
 
     final baseTextTheme = ThemeData(brightness: brightness).textTheme;
-    final textTheme = GoogleFonts.manropeTextTheme(baseTextTheme).apply(
+    final textTheme = GoogleFonts.interTextTheme(baseTextTheme).apply(
       bodyColor: text,
       displayColor: text,
     );
@@ -59,7 +62,7 @@ class AppTheme {
         backgroundColor: bg,
         foregroundColor: text,
         elevation: 0,
-        titleTextStyle: GoogleFonts.manrope(
+        titleTextStyle: GoogleFonts.inter(
           color: text,
           fontSize: 20,
           fontWeight: FontWeight.w700,
@@ -102,7 +105,7 @@ class AppTheme {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle:
-              GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 17),
+              GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -110,7 +113,7 @@ class AppTheme {
           minimumSize: const Size.fromHeight(48),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -119,8 +122,20 @@ class AppTheme {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle:
-              GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 15),
+              GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 15),
         ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        indicatorColor: AppColors.cyan.withValues(alpha: .16),
+        iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? AppColors.primary
+                : colorScheme.onSurfaceVariant)),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.accent,
+        foregroundColor: AppColors.primary,
       ),
     );
   }

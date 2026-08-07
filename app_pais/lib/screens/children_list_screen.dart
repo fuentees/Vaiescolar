@@ -10,6 +10,7 @@ import '../services/api.dart';
 import '../services/api_result.dart';
 import '../services/app_refresh_signal.dart';
 import '../theme.dart';
+import '../widgets/teco_brand.dart';
 import 'link_child_screen.dart';
 import 'maintenance_screen.dart';
 import 'notifications_screen.dart';
@@ -458,7 +459,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
       final name = child['name'] as String;
       if (child['contract_status'] == 'pending') {
         items.add(_attentionTile(
-          color: const Color(0xFF7551C2),
+          color: AppColors.primary,
           icon: Icons.assignment_outlined,
           eyebrow: 'Contrato',
           title: '$name aguarda assinatura',
@@ -472,7 +473,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
         final canPay =
             payment['checkout_url'] != null || payment['pix_key'] != null;
         items.add(_attentionTile(
-          color: const Color(0xFFE07A1F),
+          color: const Color(0xFFC38300),
           icon: Icons.account_balance_wallet_outlined,
           eyebrow: 'Financeiro',
           title: 'Mensalidade de $name pendente',
@@ -486,7 +487,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
       final absence = _nextAbsenceByStudent[id];
       if (absence != null) {
         items.add(_attentionTile(
-          color: const Color(0xFFD19A13),
+          color: AppColors.error,
           icon: Icons.event_busy_outlined,
           eyebrow: 'Falta programada',
           title: '$name não irá em ${_formatDate(absence['date'] as String)}',
@@ -539,7 +540,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F6B6B), Color(0xFF084D50)],
+          colors: [AppColors.primary, AppColors.cyan],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -772,7 +773,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
     final attentionItems = _attentionItems();
     return Scaffold(
       appBar: AppBar(
-        title: Text(_firstName.isEmpty ? 'Olá!' : 'Olá, $_firstName'),
+        title: const TecoBrandLockup(compact: true),
         actions: [
           IconButton(
             tooltip: 'Notificações',
@@ -795,12 +796,29 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                   child: ListView(
                     padding: const EdgeInsets.only(bottom: 24),
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _firstName.isEmpty ? 'Olá!' : 'Olá, $_firstName!',
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Acompanhe o transporte escolar com segurança.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      ),
                       if (activeEntries.isNotEmpty)
                         _sectionTitle(
                           'Agora',
                           'Acompanhe o transporte em tempo real.',
                           Icons.route_rounded,
-                          const Color(0xFF147A83),
+                          AppColors.cyan,
                         )
                       else
                         Container(
@@ -831,7 +849,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                           'Precisa de atenção',
                           '${attentionItems.length} ${attentionItems.length == 1 ? 'item para resolver' : 'itens para resolver'}.',
                           Icons.notifications_active_outlined,
-                          const Color(0xFFE07A1F),
+                          AppColors.accent,
                         ),
                         ...attentionItems,
                       ],

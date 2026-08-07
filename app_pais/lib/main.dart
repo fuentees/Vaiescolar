@@ -94,7 +94,7 @@ class PaisApp extends StatelessWidget {
       valueListenable: ThemeController.mode,
       builder: (context, mode, _) => MaterialApp(
         navigatorKey: navigatorKey,
-        title: 'VaiEscolar Pais',
+        title: 'TECO',
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         themeMode: mode,

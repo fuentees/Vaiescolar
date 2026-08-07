@@ -115,7 +115,7 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Se algo aparecer com problema, resolva no proprio Android '
-                    '(Configuracoes > Apps > VaiEscolar) e puxe pra atualizar esta tela.',
+                    '(Configurações > Apps > TECO) e puxe para atualizar esta tela.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

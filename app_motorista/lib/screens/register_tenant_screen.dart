@@ -60,7 +60,7 @@ class _RegisterTenantScreenState extends State<RegisterTenantScreen> {
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(
-            'Cadastre sua empresa ou van escolar no VaiEscolar.',
+            'Cadastre sua empresa ou van escolar no TECO.',
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 16),

@@ -121,7 +121,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
       }
       final total = response.contentLength ?? 0;
       final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/VaiEscolar-atualizacao.apk');
+      final file = File('${directory.path}/TECO-atualizacao.apk');
       final sink = file.openWrite();
       var received = 0;
       await for (final chunk in response.stream) {

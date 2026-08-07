@@ -94,7 +94,7 @@ class TrackingService {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'vaiescolar_tracking',
-        channelName: 'Rastreamento VaiEscolar',
+        channelName: 'Rastreamento TECO',
         channelDescription: 'Notificacao enquanto a rota esta ativa',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
@@ -123,7 +123,7 @@ class TrackingService {
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       startFailureReason = permission == LocationPermission.deniedForever
-          ? 'A localização foi bloqueada. Abra Configurações > Apps > VaiEscolar > Permissões e permita a localização.'
+          ? 'A localização foi bloqueada. Abra Configurações > Apps > TECO > Permissões e permita a localização.'
           : 'Permissão de localização negada. Permita o acesso para iniciar a rota.';
       gpsOnline.value = false;
       return false;
@@ -164,7 +164,7 @@ class TrackingService {
     await prefs.setString(_activeTripIdKey, tripId);
 
     await FlutterForegroundTask.startService(
-      notificationTitle: 'VaiEscolar',
+      notificationTitle: 'TECO',
       notificationText: 'Rota em andamento — enviando localizacao',
       callback: _startCallback,
     );

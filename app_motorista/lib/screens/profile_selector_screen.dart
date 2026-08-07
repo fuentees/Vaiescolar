@@ -2,6 +2,7 @@ import 'package:app_pais/screens/login_screen.dart' as parent;
 import 'package:flutter/material.dart';
 import '../services/profile_mode.dart';
 import '../theme.dart';
+import 'package:app_pais/widgets/teco_brand.dart';
 import 'login_screen.dart' as driver;
 
 class ProfileSelectorScreen extends StatelessWidget {
@@ -27,25 +28,7 @@ class ProfileSelectorScreen extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 460),
               child: Column(
                 children: [
-                  Container(
-                    width: 84,
-                    height: 84,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, Color(0xFF18A3A3)],
-                      ),
-                      borderRadius: BorderRadius.circular(26),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: .26),
-                          blurRadius: 28,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.route_rounded,
-                        color: Colors.white, size: 42),
-                  ),
+                  const TecoBrandLockup(),
                   const SizedBox(height: 24),
                   Text('Verificação de Usuário',
                       style: Theme.of(context)
@@ -84,7 +67,7 @@ class ProfileSelectorScreen extends StatelessWidget {
                     icon: Icons.family_restroom_rounded,
                     title: 'Sou Passageiro/Responsável',
                     subtitle: 'Quero rastrear o transporte escolar',
-                    color: AppColors.accent,
+                    color: AppColors.cyan,
                     onTap: () => _open(context, AppProfile.parent),
                   ),
                   const SizedBox(height: 22),

@@ -20,7 +20,7 @@ class MaintenanceScreen extends StatelessWidget {
               const Icon(Icons.cloud_off, size: 64, color: AppColors.primary),
               const SizedBox(height: 20),
               Text(
-                'Nao foi possivel conectar ao VaiEscolar',
+                'Não foi possível conectar ao TECO',
                 style: Theme.of(context).textTheme.titleLarge,
                 textAlign: TextAlign.center,
               ),

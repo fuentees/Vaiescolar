@@ -4,6 +4,7 @@ import '../services/api.dart';
 import '../services/push_service.dart';
 import '../services/remembered_login.dart';
 import '../theme.dart';
+import '../widgets/teco_brand.dart';
 import 'app_shell.dart';
 import 'register_with_code_screen.dart';
 
@@ -116,31 +117,9 @@ class _LoginScreenState extends State<LoginScreen> {
       child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: Column(children: [
-            Container(
-              width: 76,
-              height: 76,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                    colors: [AppColors.primary, Color(0xFF18A3A3)]),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                      color: AppColors.primary.withValues(alpha: .28),
-                      blurRadius: 28,
-                      offset: const Offset(0, 12))
-                ],
-              ),
-              child: const Icon(Icons.route_rounded,
-                  color: Colors.white, size: 38),
-            ),
+            const TecoBrandLockup(),
             const SizedBox(height: 24),
-            Text('VaiEscolar',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text('Acompanhe cada caminho',
+            Text('Acompanhe cada caminho em tempo real',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 32),

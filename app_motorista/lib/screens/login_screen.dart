@@ -4,6 +4,7 @@ import '../services/api.dart';
 import '../services/push_service.dart';
 import '../services/remembered_login.dart';
 import '../theme.dart';
+import 'package:app_pais/widgets/teco_brand.dart';
 import 'app_shell.dart';
 import 'register_tenant_screen.dart';
 
@@ -116,14 +117,8 @@ class _LoginScreenState extends State<LoginScreen> {
       child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: Column(children: [
-            const _BrandMark(icon: Icons.directions_bus_rounded),
+            const TecoBrandLockup(),
             const SizedBox(height: 24),
-            Text('VaiEscolar',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
             Text('Central do motorista',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant)),
@@ -188,26 +183,4 @@ class _LoginScreenState extends State<LoginScreen> {
           ])),
     ))));
   }
-}
-
-class _BrandMark extends StatelessWidget {
-  final IconData icon;
-  const _BrandMark({required this.icon});
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 76,
-        height: 76,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              colors: [AppColors.primary, Color(0xFF18A3A3)]),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-                color: AppColors.primary.withValues(alpha: .28),
-                blurRadius: 28,
-                offset: const Offset(0, 12))
-          ],
-        ),
-        child: Icon(icon, color: Colors.white, size: 38),
-      );
 }

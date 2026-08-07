@@ -89,7 +89,7 @@ app.get('/pay/:reference', async (req, res) => {
   const invoice = result.rows[0];
   const safe = (value) => String(value || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   res.set('Cache-Control', 'no-store');
-  res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cobranca VaiEscolar</title><style>body{font-family:system-ui;background:#f2f6f7;color:#18343a;margin:0;padding:24px}.card{max-width:520px;margin:8vh auto;background:#fff;padding:32px;border-radius:24px;box-shadow:0 18px 55px #1232}h1{color:#0f6672}.value{font-size:34px;font-weight:800}.status{padding:8px 12px;border-radius:99px;background:#e7f6ee;display:inline-block}.hint{color:#66777b}</style></head><body><main class="card"><h1>VaiEscolar</h1><p>Assinatura da transportadora</p><h2>${safe(invoice.tenant_name)}</h2><p>${safe(invoice.description)}</p><p class="value">R$ ${Number(invoice.amount).toFixed(2).replace('.', ',')}</p><p class="status">${safe(invoice.status)}</p><p class="hint">Este link identifica a cobranca. Para PIX, boleto ou cartao, o administrador global deve conectar um provedor de pagamentos. A confirmacao final sempre ocorre no servidor.</p></main></body></html>`);
+  res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cobranca TECO</title><style>body{font-family:system-ui;background:#f3f4f6;color:#1f2937;margin:0;padding:24px}.card{max-width:520px;margin:8vh auto;background:#fff;padding:32px;border-radius:24px;box-shadow:0 18px 55px #1232}h1{color:#0f4c5c}.value{font-size:34px;font-weight:800}.status{padding:8px 12px;border-radius:99px;background:#e7f6ee;display:inline-block}.hint{color:#66777b}</style></head><body><main class="card"><h1>TECO</h1><p>Assinatura da transportadora</p><h2>${safe(invoice.tenant_name)}</h2><p>${safe(invoice.description)}</p><p class="value">R$ ${Number(invoice.amount).toFixed(2).replace('.', ',')}</p><p class="status">${safe(invoice.status)}</p><p class="hint">Este link identifica a cobranca. Para PIX, boleto ou cartao, o administrador global deve conectar um provedor de pagamentos. A confirmacao final sempre ocorre no servidor.</p></main></body></html>`);
 });
 app.get('/health', async (_req, res) => {
   try {
@@ -111,14 +111,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.33', buildNumber: 4039, releaseBuild: 39,
-      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Marcador GPS da van reduzido e redesenhado para acompanhar as ruas como em aplicativos de navegacao.',
+      version: '1.0.34', buildNumber: 4040, releaseBuild: 40,
+      url: 'https://vaiescolar.onrender.com/downloads/TECO.apk',
+      notes: 'Nova identidade visual TECO aplicada ao aplicativo, icones, cores, mapa, notificacoes e painel.',
     },
     responsavel: {
-      version: '1.0.33', buildNumber: 4039, releaseBuild: 39,
-      url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Marcador GPS da van reduzido e redesenhado para acompanhar as ruas como em aplicativos de navegacao.',
+      version: '1.0.34', buildNumber: 4040, releaseBuild: 40,
+      url: 'https://vaiescolar.onrender.com/downloads/TECO.apk',
+      notes: 'Nova identidade visual TECO aplicada ao aplicativo, icones, cores, mapa, notificacoes e painel.',
     },
   };
   const version = versions[req.params.app];
@@ -142,6 +142,7 @@ app.get('/downloads/VaiEscolar-Motorista.apk', sendApk('VaiEscolar-Motorista-arm
 app.get('/downloads/VaiEscolar-Responsavel.apk', sendApk('VaiEscolar-Responsavel-arm64.apk'));
 app.get('/downloads/VaiEscolar-Responsavel.zip', sendApk('VaiEscolar-Responsavel.zip'));
 app.get('/downloads/VaiEscolar.apk', sendApk('VaiEscolar-arm64.apk'));
+app.get('/downloads/TECO.apk', sendApk('VaiEscolar-arm64.apk'));
 app.get('/downloads/VaiEscolar.zip', sendApk('VaiEscolar.zip'));
 
 // Rate limit mais restrito nos endpoints publicos de auth (forca bruta de
@@ -725,14 +726,14 @@ app.post('/api/chat/:parentUserId', authMiddleware, chatLimiter, validateBody(ch
   if (req.auth.role === 'parent') {
     db.query(`SELECT id FROM users WHERE tenant_id=$1 AND role IN ('admin','driver')`, [req.auth.tenantId])
       .then((staff) =>
-        push.sendToUsers(staff.rows.map((s) => s.id), 'VaiEscolar', 'Nova mensagem de um responsavel', {
+        push.sendToUsers(staff.rows.map((s) => s.id), 'TECO', 'Nova mensagem de um responsavel', {
           type: 'chat', parentUserId,
         })
       )
       .catch((e) => console.error('[push] falha ao notificar chat', e.message));
   } else {
     push
-      .sendToUsers([parentUserId], 'VaiEscolar', 'Nova mensagem do motorista', { type: 'chat', parentUserId })
+      .sendToUsers([parentUserId], 'TECO', 'Nova mensagem do motorista', { type: 'chat', parentUserId })
       .catch((e) => console.error('[push] falha ao notificar chat', e.message));
   }
 
@@ -1470,7 +1471,7 @@ app.get('/contracts/verify/:token', async (req, res) => {
   const c = result.rows[0];
   const valid = sha256(c.contract_text) === c.contract_hash;
   res.set('Cache-Control', 'no-store');
-  res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Verificar contrato</title><style>body{font-family:system-ui;background:#f5f7f8;margin:0;padding:24px;color:#202124}.card{max-width:680px;margin:40px auto;background:white;padding:28px;border-radius:20px;box-shadow:0 12px 40px #0001}.ok{color:#087f5b}.bad{color:#c92a2a}code{word-break:break-all;background:#f1f3f5;padding:8px;display:block;border-radius:8px}</style></head><body><main class="card"><h1>VaiEscolar</h1><h2 class="${valid ? 'ok' : 'bad'}">${valid ? 'Documento autentico' : 'Falha de integridade'}</h2><p>Status: <strong>${c.status}</strong> - Versao ${c.version}</p><p>Emitido em: ${pdfDate(c.issued_at)}${c.signed_at ? `<br>Assinado em: ${pdfDate(c.signed_at)} (Brasilia)` : ''}</p><p>Hash SHA-256 do documento:</p><code>${c.contract_hash}</code>${c.evidence_hash ? `<p>Hash SHA-256 das evidencias:</p><code>${c.evidence_hash}</code>` : ''}<p>Esta consulta confirma a integridade tecnica do registro sem expor CPF, nome, endereco ou outros dados pessoais.</p></main></body></html>`);
+  res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Verificar contrato</title><style>body{font-family:Inter,system-ui;background:#f3f4f6;margin:0;padding:24px;color:#1f2937}.card{max-width:680px;margin:40px auto;background:white;padding:28px;border-radius:20px;box-shadow:0 12px 40px #0f4c5c18;border-top:5px solid #2bb3c0}.card h1{color:#0f4c5c}.ok{color:#22a06b}.bad{color:#d94c57}code{word-break:break-all;background:#f1f3f5;padding:8px;display:block;border-radius:8px}</style></head><body><main class="card"><h1>TECO</h1><h2 class="${valid ? 'ok' : 'bad'}">${valid ? 'Documento autentico' : 'Falha de integridade'}</h2><p>Status: <strong>${c.status}</strong> - Versao ${c.version}</p><p>Emitido em: ${pdfDate(c.issued_at)}${c.signed_at ? `<br>Assinado em: ${pdfDate(c.signed_at)} (Brasilia)` : ''}</p><p>Hash SHA-256 do documento:</p><code>${c.contract_hash}</code>${c.evidence_hash ? `<p>Hash SHA-256 das evidencias:</p><code>${c.evidence_hash}</code>` : ''}<p>Esta consulta confirma a integridade tecnica do registro sem expor CPF, nome, endereco ou outros dados pessoais.</p></main></body></html>`);
 });
 
 app.get('/api/contracts/:id/verify', authMiddleware, async (req, res) => {
@@ -1502,7 +1503,7 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
   const publicBase = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
   const verificationUrl = `${publicBase}/contracts/verify/${contract.verification_token}`;
   const qrBuffer = await QRCode.toBuffer(verificationUrl, { type: 'png', width: 220, margin: 1,
-    color: { dark: '#0F5B66', light: '#FFFFFF' } });
+    color: { dark: '#0F4C5C', light: '#FFFFFF' } });
   const filename = `contrato-${contract.student_name.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}-v${contract.version}.pdf`;
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `${req.query.download === '1' ? 'attachment' : 'inline'}; filename="${filename}"`);
@@ -1510,7 +1511,7 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
   const doc = new PDFDocument({ size: 'A4', margins: { top: 52, bottom: 52, left: 58, right: 58 }, bufferPages: true,
     info: { Title: contract.title, Author: contract.legal_name || contract.tenant_name, Subject: `Contrato individual de ${contract.student_name}` } });
   doc.pipe(res);
-  doc.fillColor('#0F5B66').font('Helvetica-Bold').fontSize(18).text('VaiEscolar', { align: 'center' });
+  doc.fillColor('#0F4C5C').font('Helvetica-Bold').fontSize(18).text('TECO', { align: 'center' });
   doc.moveDown(.3).fillColor('#202124').fontSize(15).text(contract.title, { align: 'center' });
   doc.moveDown(.4).font('Helvetica').fontSize(9).fillColor('#666666')
     .text(`Aluno: ${contract.student_name}   |   Versao: ${contract.version}   |   Emitido em: ${pdfDate(contract.issued_at)}`, { align: 'center' });
@@ -1520,7 +1521,7 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
     .text(`Responsavel: ${contract.signer_name || contract.guardian_names || 'nao informado'}`)
     .text(`CPF do responsavel: ${contract.signer_cpf ? formatCpf(decryptCpf(contract.signer_cpf)) : 'sera registrado no ato da assinatura'}`);
   doc.moveDown(1.5).fillColor('#202124').fontSize(10.5).text(contract.contract_text, { align: 'justify', lineGap: 3 });
-  doc.moveDown(1.5).font('Helvetica-Bold').fontSize(12).fillColor('#0F5B66').text('Comprovante da assinatura eletronica');
+  doc.moveDown(1.5).font('Helvetica-Bold').fontSize(12).fillColor('#0F4C5C').text('Comprovante da assinatura eletronica');
   doc.moveDown(.5).font('Helvetica').fontSize(9.5).fillColor('#202124');
   if (contract.status === 'signed') {
     doc.text(`Assinante: ${contract.signer_name}`);
@@ -1535,11 +1536,11 @@ app.get('/api/contracts/:id/pdf', authMiddleware, async (req, res) => {
   doc.moveDown(1).font('Courier').fontSize(7.5).fillColor('#444444')
     .text(`HASH DO DOCUMENTO (SHA-256)\n${contract.contract_hash}\n\nHASH DAS EVIDENCIAS (SHA-256)\n${contract.evidence_hash || 'Ainda nao gerado'}`);
   if (doc.y > 650) doc.addPage();
-  doc.moveDown(1).font('Helvetica-Bold').fontSize(10).fillColor('#0F5B66').text('Verifique a autenticidade');
+  doc.moveDown(1).font('Helvetica-Bold').fontSize(10).fillColor('#0F4C5C').text('Verifique a autenticidade');
   const qrY = doc.y + 6;
   doc.image(qrBuffer, 58, qrY, { width: 86 });
   doc.font('Helvetica').fontSize(8).fillColor('#444444')
-    .text('Escaneie o QR Code para conferir os hashes diretamente no VaiEscolar. A pagina publica nao exibe dados pessoais.', 154, qrY + 18, { width: 380 });
+    .text('Escaneie o QR Code para conferir os hashes diretamente no TECO. A pagina publica nao exibe dados pessoais.', 154, qrY + 18, { width: 380 });
   doc.font('Courier').fontSize(6.5).text(verificationUrl, 154, qrY + 54, { width: 380 });
   doc.y = qrY + 94;
   const pages = doc.bufferedPageRange();
@@ -2717,7 +2718,7 @@ app.post('/api/trips/start', authMiddleware, requireRole('driver', 'admin'), asy
     .then((parents) =>
       push.sendToUsers(
         parents.rows.map((p) => p.guardian_user_id),
-        'VaiEscolar',
+        'TECO',
         'A van iniciou a rota',
         { type: 'trip_started', tripId }
       )
@@ -3256,7 +3257,7 @@ app.post('/api/trips/:id/events', authMiddleware, requireRole('driver', 'admin')
         : '';
       return push.sendToUsers(
         info.rows.map((row) => row.guardian_user_id),
-        'VaiEscolar',
+        'TECO',
         `${studentName} ${action} às ${timeBrasilia}${receiver}`,
         { type: 'trip_event', tripId: req.params.id, eventType: type, studentId: student_id }
       );

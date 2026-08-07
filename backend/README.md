@@ -1,4 +1,4 @@
-# Backend — VaiEscolar API
+# Backend — TECO API
 
 Node + Express + PostgreSQL + WebSocket + push (FCM). Multi-tenant.
 

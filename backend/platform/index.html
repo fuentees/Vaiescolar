@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#0b5d68">
-  <title>VaiEscolar | Controle da plataforma</title>
+  <meta name="theme-color" content="#0F4C5C">
+  <title>TECO | Controle da plataforma</title>
   <link rel="stylesheet" href="/platform/styles.css">
 </head>
 <body>
   <div id="login" class="login-shell">
     <form id="loginForm" class="login-card">
-      <div class="brand-mark">V</div>
+      <img class="brand-mark" src="/platform/teco-icon.svg" alt="TECO">
       <p class="eyebrow">CONTROLE DA PLATAFORMA</p>
-      <h1>VaiEscolar</h1>
-      <p class="muted">Acesso exclusivo do administrador global.</p>
+      <h1>TECO</h1>
+      <p class="muted">Transporte Escolar Conectado</p>
       <label>E-mail<input id="email" type="email" autocomplete="username" required></label>
       <label>Senha<input id="password" type="password" autocomplete="current-password" required></label>
       <p id="loginError" class="error"></p>
@@ -23,17 +23,17 @@
 
   <div id="app" class="app-shell hidden">
     <aside>
-      <div class="brand"><div class="brand-mark small">V</div><div><strong>VaiEscolar</strong><span>Plataforma</span></div></div>
+      <div class="brand"><img class="brand-mark small" src="/platform/teco-icon.svg" alt=""><div><strong>TECO</strong><span>Transporte Escolar Conectado</span></div></div>
       <nav id="nav">
-        <button data-view="dashboard" class="active">◫ <span>Visão geral</span></button>
-        <button data-view="tenants">⌂ <span>Transportadoras</span></button>
+        <button data-view="dashboard" class="active">⌂ <span>Visão geral</span></button>
+        <button data-view="tenants">▦ <span>Transportadoras</span></button>
         <button data-view="plans">◇ <span>Planos e limites</span></button>
         <button data-view="billing">$ <span>Financeiro</span></button>
         <button data-view="storage">▤ <span>Armazenamento</span></button>
         <button data-view="support">? <span>Suporte</span></button>
-        <button data-view="announcements">✦ <span>Comunicados</span></button>
-        <button data-view="health">⌁ <span>Saúde do sistema</span></button>
-        <button data-view="audit">≡ <span>Auditoria</span></button>
+        <button data-view="announcements">◉ <span>Comunicados</span></button>
+        <button data-view="health">♥ <span>Saúde do sistema</span></button>
+        <button data-view="audit">✓ <span>Auditoria</span></button>
       </nav>
       <button id="logout" class="logout">Sair</button>
     </aside>

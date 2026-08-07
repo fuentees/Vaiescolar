@@ -1,7 +1,7 @@
 name: app_motorista
 description: App do motorista - rastreamento em 1o plano de alta precisao (stack 100% gratuita).
 publish_to: "none"
-version: 1.0.33+4039
+version: 1.0.34+4040
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

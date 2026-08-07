@@ -1,4 +1,4 @@
-# VaiEscolar — SaaS de transporte escolar
+# TECO — Transporte Escolar Conectado
 
 Monorepo com tres partes:
 

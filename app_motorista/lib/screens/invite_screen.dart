@@ -67,7 +67,7 @@ class _InviteScreenState extends State<InviteScreen> {
 
   void _share(Map<String, dynamic> invite) {
     Share.share(
-      'Ola! Voce foi convidado para acompanhar ${widget.studentName} no VaiEscolar.\n\n'
+      'Olá! Você foi convidado para acompanhar ${widget.studentName} no TECO.\n\n'
       'Abra o app, escolha Responsavel e toque em "Criar conta com codigo de convite".\n'
       'Codigo: ${invite['code']}\n\n'
       'O codigo vale ate ${_date(invite['expires_at'])} e so pode ser usado uma vez. '
