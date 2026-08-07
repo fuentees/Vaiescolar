@@ -113,12 +113,12 @@ app.get('/app-version/:app', (req, res) => {
     motorista: {
       version: '1.0.31', buildNumber: 4037, releaseBuild: 37,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contrato corrigido: codigo de confirmacao visivel, validacao campo a campo e botao protegido da barra do celular.',
+      notes: 'Contrato corrigido e instalacao Android ajustada para o versionCode 4037.',
     },
     responsavel: {
       version: '1.0.31', buildNumber: 4037, releaseBuild: 37,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contrato corrigido: codigo de confirmacao visivel, validacao campo a campo e botao protegido da barra do celular.',
+      notes: 'Contrato corrigido e instalacao Android ajustada para o versionCode 4037.',
     },
   };
   const version = versions[req.params.app];
