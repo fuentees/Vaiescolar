@@ -111,14 +111,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.32', buildNumber: 4038, releaseBuild: 38,
+      version: '1.0.33', buildNumber: 4039, releaseBuild: 39,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Inicio do responsavel reorganizado em rota ao vivo, pendencias e alunos, com cores e acoes claras.',
+      notes: 'Marcador GPS da van reduzido e redesenhado para acompanhar as ruas como em aplicativos de navegacao.',
     },
     responsavel: {
-      version: '1.0.32', buildNumber: 4038, releaseBuild: 38,
+      version: '1.0.33', buildNumber: 4039, releaseBuild: 39,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Inicio do responsavel reorganizado em rota ao vivo, pendencias e alunos, com cores e acoes claras.',
+      notes: 'Marcador GPS da van reduzido e redesenhado para acompanhar as ruas como em aplicativos de navegacao.',
     },
   };
   const version = versions[req.params.app];
