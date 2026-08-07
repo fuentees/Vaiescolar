@@ -111,14 +111,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.31', buildNumber: 4037, releaseBuild: 37,
+      version: '1.0.32', buildNumber: 4038, releaseBuild: 38,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contrato corrigido e instalacao Android ajustada para o versionCode 4037.',
+      notes: 'Inicio do responsavel reorganizado em rota ao vivo, pendencias e alunos, com cores e acoes claras.',
     },
     responsavel: {
-      version: '1.0.31', buildNumber: 4037, releaseBuild: 37,
+      version: '1.0.32', buildNumber: 4038, releaseBuild: 38,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contrato corrigido e instalacao Android ajustada para o versionCode 4037.',
+      notes: 'Inicio do responsavel reorganizado em rota ao vivo, pendencias e alunos, com cores e acoes claras.',
     },
   };
   const version = versions[req.params.app];

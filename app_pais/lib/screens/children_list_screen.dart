@@ -335,6 +335,174 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
     );
   }
 
+  void _openContract(String id, String name) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ContractScreen(studentId: id, studentName: name),
+    ));
+  }
+
+  Future<void> _openPayment(Map<String, dynamic> payment) async {
+    final checkoutUrl = payment['checkout_url'] as String?;
+    if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
+      await launchUrl(Uri.parse(checkoutUrl),
+          mode: LaunchMode.externalApplication);
+      return;
+    }
+    final pixKey = payment['pix_key'] as String?;
+    if (pixKey != null && pixKey.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: pixKey));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chave PIX copiada')),
+        );
+      }
+      return;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Solicite os dados de pagamento ao transportador.')),
+      );
+    }
+  }
+
+  Widget _sectionTitle(
+      String title, String subtitle, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 21),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 2),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attentionTile({
+    required Color color,
+    required IconData icon,
+    required String eyebrow,
+    required String title,
+    required String subtitle,
+    required String actionLabel,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 5, 16, 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: .22)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .14),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(eyebrow.toUpperCase(),
+                style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .5)),
+            const SizedBox(height: 2),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(subtitle),
+        ),
+        trailing: Semantics(
+          button: true,
+          label: actionLabel,
+          child: Icon(Icons.chevron_right_rounded, color: color),
+        ),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  List<Widget> _attentionItems() {
+    final items = <Widget>[];
+    for (final dynamic value in _children) {
+      final child = value as Map<String, dynamic>;
+      final id = child['id'] as String;
+      final name = child['name'] as String;
+      if (child['contract_status'] == 'pending') {
+        items.add(_attentionTile(
+          color: const Color(0xFF7551C2),
+          icon: Icons.assignment_outlined,
+          eyebrow: 'Contrato',
+          title: '$name aguarda assinatura',
+          subtitle: 'Leia e assine o documento para regularizar o cadastro.',
+          actionLabel: 'Abrir contrato',
+          onTap: () => _openContract(id, name),
+        ));
+      }
+      final payment = _paymentStatusByStudent[id];
+      if (payment != null && payment['status'] != 'paid') {
+        final canPay =
+            payment['checkout_url'] != null || payment['pix_key'] != null;
+        items.add(_attentionTile(
+          color: const Color(0xFFE07A1F),
+          icon: Icons.account_balance_wallet_outlined,
+          eyebrow: 'Financeiro',
+          title: 'Mensalidade de $name pendente',
+          subtitle: canPay
+              ? 'Toque para consultar e realizar o pagamento.'
+              : 'Consulte o transportador para regularizar o pagamento.',
+          actionLabel: canPay ? 'Pagar mensalidade' : 'Ver pendência',
+          onTap: () => _openPayment(payment),
+        ));
+      }
+      final absence = _nextAbsenceByStudent[id];
+      if (absence != null) {
+        items.add(_attentionTile(
+          color: const Color(0xFFD19A13),
+          icon: Icons.event_busy_outlined,
+          eyebrow: 'Falta programada',
+          title: '$name não irá em ${_formatDate(absence['date'] as String)}',
+          subtitle: switch (absence['direction']) {
+            'to_school' => 'Somente no trajeto de ida para a escola.',
+            'to_home' => 'Somente no trajeto de volta para casa.',
+            _ => 'Ausência registrada para o dia todo.',
+          },
+          actionLabel: 'Cancelar falta',
+          onTap: () => _cancelAbsence(absence['id'] as String),
+        ));
+      }
+    }
+    return items;
+  }
+
   String _updatedLabel(DateTime? value) {
     if (value == null) return 'Aguardando sinal do GPS';
     final minutes = DateTime.now().toUtc().difference(value.toUtc()).inMinutes;
@@ -469,9 +637,6 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
 
   Widget _childCard(Map<String, dynamic> child) {
     final id = child['id'] as String;
-    final trip = _activeByStudent[id];
-    final payment = _paymentStatusByStudent[id];
-    final absence = _nextAbsenceByStudent[id];
     final name = child['name'] as String;
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     return Card(
@@ -534,113 +699,31 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            if (child['contract_status'] == 'pending') ...[
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading:
-                    const Icon(Icons.pending_actions, color: Colors.orange),
-                title: const Text('Contrato aguardando assinatura',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
-                subtitle:
-                    const Text('Leia e assine para manter o cadastro regular.'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) =>
-                      ContractScreen(studentId: id, studentName: name),
-                )),
-              ),
-              const SizedBox(height: 6),
-            ],
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: (trip != null ? AppColors.success : AppColors.primary)
-                    .withValues(alpha: .08),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(trip?.icon ?? Icons.home_rounded,
-                      size: 20,
-                      color:
-                          trip != null ? AppColors.success : AppColors.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      trip?.status ?? 'Sem viagem ativa agora',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (absence != null) ...[
-              const SizedBox(height: 10),
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.event_busy_rounded,
-                    color: AppColors.error),
-                title: Text(
-                    'Falta agendada para ${_formatDate(absence['date'] as String)}'),
-                subtitle: Text(switch (absence['direction']) {
-                  'to_school' => 'Somente ida para a escola',
-                  'to_home' => 'Somente volta para casa',
-                  _ => 'Dia todo',
-                }),
-                trailing: TextButton(
-                  onPressed: () => _cancelAbsence(absence['id'] as String),
-                  child: const Text('Cancelar'),
-                ),
-              ),
-            ],
-            if (payment != null) ...[
-              const Divider(height: 24),
-              Row(
-                children: [
-                  Icon(
-                    payment['status'] == 'paid'
-                        ? Icons.check_circle_outline
-                        : Icons.receipt_long_outlined,
-                    size: 18,
-                    color: payment['status'] == 'paid'
-                        ? AppColors.success
-                        : AppColors.accent,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(payment['status'] == 'paid'
-                        ? 'Mensalidade em dia'
-                        : 'Mensalidade pendente'),
-                  ),
-                  if (payment['status'] != 'paid' &&
-                      payment['checkout_url'] != null)
-                    TextButton(
-                      onPressed: () => launchUrl(
-                        Uri.parse(payment['checkout_url'] as String),
-                        mode: LaunchMode.externalApplication,
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            StudentDetailScreen(studentId: id, name: name),
                       ),
-                      child: const Text('Pagar'),
-                    )
-                  else if (payment['status'] != 'paid' &&
-                      payment['pix_key'] != null)
-                    TextButton(
-                      onPressed: () async {
-                        await Clipboard.setData(
-                            ClipboardData(text: payment['pix_key'] as String));
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Chave PIX copiada')),
-                          );
-                        }
-                      },
-                      child: const Text('Copiar PIX'),
                     ),
-                ],
-              ),
-            ],
+                    icon: const Icon(Icons.person_outline, size: 18),
+                    label: const Text('Detalhes'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _markAbsence(id),
+                    icon: const Icon(Icons.event_busy_outlined, size: 18),
+                    label: const Text('Avisar falta'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -686,6 +769,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
         .cast<Map<String, dynamic>>()
         .where((child) => _activeByStudent.containsKey(child['id']))
         .toList();
+    final attentionItems = _attentionItems();
     return Scaffold(
       appBar: AppBar(
         title: Text(_firstName.isEmpty ? 'Olá!' : 'Olá, $_firstName'),
@@ -711,32 +795,61 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
                   child: ListView(
                     padding: const EdgeInsets.only(bottom: 24),
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                        child: Text(
-                          activeEntries.isEmpty
-                              ? 'Tudo tranquilo por aqui'
-                              : 'Acompanhamento em tempo real',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                      if (activeEntries.isNotEmpty)
+                        _sectionTitle(
+                          'Agora',
+                          'Acompanhe o transporte em tempo real.',
+                          Icons.route_rounded,
+                          const Color(0xFF147A83),
+                        )
+                      else
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: .08),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.check_circle_outline,
+                                  color: AppColors.success),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Nenhuma viagem em andamento agora.',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                       for (final child in activeEntries)
                         _activeTripCard(child, _activeByStudent[child['id']]!),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text('Meus filhos',
-                                  style:
-                                      Theme.of(context).textTheme.titleLarge),
-                            ),
-                            TextButton.icon(
-                              onPressed: _addChild,
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Adicionar'),
-                            ),
-                          ],
+                      if (attentionItems.isNotEmpty) ...[
+                        _sectionTitle(
+                          'Precisa de atenção',
+                          '${attentionItems.length} ${attentionItems.length == 1 ? 'item para resolver' : 'itens para resolver'}.',
+                          Icons.notifications_active_outlined,
+                          const Color(0xFFE07A1F),
+                        ),
+                        ...attentionItems,
+                      ],
+                      _sectionTitle(
+                        'Meus filhos',
+                        'Dados e ações rápidas de cada aluno.',
+                        Icons.family_restroom_rounded,
+                        AppColors.primary,
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: TextButton.icon(
+                            onPressed: _addChild,
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Adicionar filho'),
+                          ),
                         ),
                       ),
                       for (final dynamic child in _children)
