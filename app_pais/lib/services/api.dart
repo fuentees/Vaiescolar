@@ -331,46 +331,58 @@ class Api {
 
   static Future<String?> requestContractCode(String contractId) async {
     lastContractDevCode = null;
-    final res = await http.post(
-      Uri.parse('${Config.apiBase}/api/contracts/$contractId/challenge'),
-      headers: {
-        'authorization': 'Bearer $_token',
-        'content-type': 'application/json'
-      },
-      body: jsonEncode({}),
-    );
-    if (res.statusCode == 200) {
-      lastContractDevCode = jsonDecode(res.body)['devCode'] as String?;
-      return null;
-    }
     try {
-      return jsonDecode(res.body)['error'] as String?;
+      final res = await http
+          .post(
+            Uri.parse('${Config.apiBase}/api/contracts/$contractId/challenge'),
+            headers: {
+              'authorization': 'Bearer $_token',
+              'content-type': 'application/json'
+            },
+            body: jsonEncode({}),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode == 200) {
+        lastContractDevCode = jsonDecode(res.body)['devCode'] as String?;
+        return null;
+      }
+      try {
+        return jsonDecode(res.body)['error'] as String?;
+      } catch (_) {
+        return 'Nao foi possivel enviar o codigo.';
+      }
     } catch (_) {
-      return 'Nao foi possivel enviar o codigo.';
+      return 'Sem conexao com o servidor. Tente novamente.';
     }
   }
 
   static Future<String?> signContract(String contractId, String signerName,
       String cpf, String password, String verificationCode) async {
-    final res = await http.post(
-      Uri.parse('${Config.apiBase}/api/contracts/$contractId/sign'),
-      headers: {
-        'authorization': 'Bearer $_token',
-        'content-type': 'application/json'
-      },
-      body: jsonEncode({
-        'accepted': true,
-        'signer_name': signerName,
-        'cpf': cpf,
-        'password': password,
-        'verification_code': verificationCode
-      }),
-    );
-    if (res.statusCode == 200) return null;
     try {
-      return jsonDecode(res.body)['error'] as String?;
+      final res = await http
+          .post(
+            Uri.parse('${Config.apiBase}/api/contracts/$contractId/sign'),
+            headers: {
+              'authorization': 'Bearer $_token',
+              'content-type': 'application/json'
+            },
+            body: jsonEncode({
+              'accepted': true,
+              'signer_name': signerName,
+              'cpf': cpf,
+              'password': password,
+              'verification_code': verificationCode
+            }),
+          )
+          .timeout(const Duration(seconds: 25));
+      if (res.statusCode == 200) return null;
+      try {
+        return jsonDecode(res.body)['error'] as String?;
+      } catch (_) {
+        return 'Nao foi possivel assinar o contrato.';
+      }
     } catch (_) {
-      return 'Nao foi possivel assinar o contrato.';
+      return 'Sem conexao com o servidor. A assinatura nao foi enviada.';
     }
   }
 

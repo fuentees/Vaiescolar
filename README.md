@@ -8,6 +8,27 @@ Monorepo com tres partes:
 | `app_motorista/` | App Flutter do motorista (rastreamento, gestao de alunos/rotas, convites, chat) |
 | `app_pais/`      | App Flutter dos pais (mapa ao vivo, timeline, push, chat)        |
 
+## Painel administrativo global
+
+O controle comercial da plataforma fica em `/platform/` e e separado do
+administrador de cada transportadora. O painel inclui visao geral, clientes,
+planos e limites, assinaturas, cobrancas e links de pagamento, armazenamento,
+suporte, comunicados, saude dos servicos e auditoria global.
+
+Para habilitar um administrador existente como proprietario da plataforma:
+
+```bash
+cd backend
+npm run platform:promote -- administrador@dominio.com
+```
+
+Somente usuarios `admin` explicitamente promovidos acessam `/api/platform/*`.
+Transportadoras suspensas ou canceladas deixam de autenticar nos aplicativos,
+e os limites do plano sao aplicados no servidor ao cadastrar alunos, equipe,
+veiculos e escolas. Provedores de PIX, boleto e cartao podem fornecer a URL de
+pagamento ao gerar uma fatura; a confirmacao automatica deve ser feita por
+webhook assinado do provedor antes de ativar a cobranca em producao.
+
 ## Gestao e chat (adicionados nesta rodada)
 O motorista/admin agora tem, no proprio app (drawer de navegacao), telas
 para **cadastrar alunos e rotas** (antes so dava via curl) e **conversar com

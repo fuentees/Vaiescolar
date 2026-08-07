@@ -16,4 +16,12 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: "*"
+        sync: false
+      - key: DB_POOL_MAX
+        value: "10"
+      - key: DB_STATEMENT_TIMEOUT_MS
+        value: "30000"
+      - key: GPS_RETENTION_DAYS
+        value: "30"
+      - key: GPS_CLEANUP_BATCH_SIZE
+        value: "10000"

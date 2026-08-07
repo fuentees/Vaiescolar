@@ -47,6 +47,7 @@ before(async () => {
   }).then((r) => r.json());
   adminToken = reg.token;
   tenantId = reg.tenantId;
+  await db.query(`UPDATE users SET is_platform_owner=true WHERE tenant_id=$1 AND role='admin'`, [tenantId]);
 
   await post('/api/users', { role: 'driver', name: 'Motorista Fase7', email: `driver-f7-${suffix}@test.local`, password: 'senha123' }, adminToken);
   driverToken = await post('/api/auth/login', { email: `driver-f7-${suffix}@test.local`, password: 'senha123' })
@@ -288,4 +289,47 @@ test('GET /api/audit-log registra reset de senha e exige admin', async () => {
 
   const log = await get('/api/audit-log?entityType=user', adminToken).then((r) => r.json());
   assert.ok(log.some((l) => l.action === 'resetar_senha' && l.entity_id === driver.id));
+});
+
+test('painel global isola acesso e gerencia plano, cobranca e auditoria', async () => {
+  const forbidden = await get('/api/platform/dashboard', parentToken);
+  assert.equal(forbidden.status, 403);
+
+  const dashboard = await get('/api/platform/dashboard', adminToken);
+  assert.equal(dashboard.status, 200);
+  const dashboardBody = await dashboard.json();
+  assert.ok(dashboardBody.tenants.total >= 1);
+  assert.ok(Number(dashboardBody.finance.mrr) >= 0);
+
+  const plans = await get('/api/platform/plans', adminToken).then((r) => r.json());
+  assert.ok(plans.some((plan) => plan.code === 'basic'));
+  const subscription = await put(`/api/platform/tenants/${tenantId}/subscription`, {
+    plan_id: plans.find((plan) => plan.code === 'basic').id,
+    billing_cycle: 'monthly', status: 'active', overrides: { max_students: 40 },
+  }, adminToken);
+  assert.equal(subscription.status, 200);
+
+  await put(`/api/platform/tenants/${tenantId}/subscription`, {
+    plan_id: plans.find((plan) => plan.code === 'basic').id,
+    billing_cycle: 'monthly', status: 'active', overrides: { max_students: 1 },
+  }, adminToken);
+  const overLimit = await post('/api/students', { name: 'Aluno acima do plano' }, adminToken);
+  assert.equal(overLimit.status, 409);
+  assert.match((await overLimit.json()).error, /limite de alunos/);
+  await put(`/api/platform/tenants/${tenantId}/subscription`, {
+    plan_id: plans.find((plan) => plan.code === 'basic').id,
+    billing_cycle: 'monthly', status: 'active', overrides: { max_students: 40 },
+  }, adminToken);
+
+  const invoice = await post('/api/platform/invoices', {
+    tenant_id: tenantId, amount: 99.90, description: 'Plano de teste', due_at: new Date(Date.now() + 86400000).toISOString(),
+  }, adminToken);
+  assert.equal(invoice.status, 201);
+  const invoiceBody = await invoice.json();
+  assert.match(invoiceBody.payment_url, /\/pay\//);
+  const paid = await post(`/api/platform/invoices/${invoiceBody.id}/status`, { status: 'paid' }, adminToken);
+  assert.equal(paid.status, 200);
+
+  const audit = await get('/api/platform/audit', adminToken).then((r) => r.json());
+  assert.ok(audit.some((item) => item.action === 'gerar_fatura' && item.tenant_id === tenantId));
 });

@@ -21,11 +21,13 @@ function sign(payload) {
 // token_version, invalidando na hora qualquer token de 30 dias emitido antes
 // disso (sem precisar de uma blacklist separada).
 async function checkTokenVersion(decoded) {
-  const r = await db.query('SELECT token_version FROM users WHERE id=$1 AND tenant_id=$2', [
+  const r = await db.query(`SELECT u.token_version,u.is_platform_owner,t.status tenant_status
+    FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=$1 AND u.tenant_id=$2`, [
     decoded.userId, decoded.tenantId,
   ]);
   if (r.rows.length === 0) return false;
-  return r.rows[0].token_version === decoded.tokenVersion;
+  return r.rows[0].token_version === decoded.tokenVersion &&
+    (r.rows[0].is_platform_owner || !['suspended','cancelled'].includes(r.rows[0].tenant_status));
 }
 
 // Middleware: valida o Bearer token e injeta { userId, tenantId, role } em req.auth

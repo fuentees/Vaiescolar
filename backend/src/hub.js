@@ -24,4 +24,10 @@ function broadcast(tripId, payload) {
   }
 }
 
-module.exports = { subscribe, broadcast };
+function stats() {
+  let connections = 0;
+  for (const clients of rooms.values()) connections += clients.size;
+  return { rooms: rooms.size, connections };
+}
+
+module.exports = { subscribe, broadcast, stats };

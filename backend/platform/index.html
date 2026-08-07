@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b5d68">
+  <title>VaiEscolar | Controle da plataforma</title>
+  <link rel="stylesheet" href="/platform/styles.css">
+</head>
+<body>
+  <div id="login" class="login-shell">
+    <form id="loginForm" class="login-card">
+      <div class="brand-mark">V</div>
+      <p class="eyebrow">CONTROLE DA PLATAFORMA</p>
+      <h1>VaiEscolar</h1>
+      <p class="muted">Acesso exclusivo do administrador global.</p>
+      <label>E-mail<input id="email" type="email" autocomplete="username" required></label>
+      <label>Senha<input id="password" type="password" autocomplete="current-password" required></label>
+      <p id="loginError" class="error"></p>
+      <button class="primary" type="submit">Entrar com segurança</button>
+    </form>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside>
+      <div class="brand"><div class="brand-mark small">V</div><div><strong>VaiEscolar</strong><span>Plataforma</span></div></div>
+      <nav id="nav">
+        <button data-view="dashboard" class="active">◫ <span>Visão geral</span></button>
+        <button data-view="tenants">⌂ <span>Transportadoras</span></button>
+        <button data-view="plans">◇ <span>Planos e limites</span></button>
+        <button data-view="billing">$ <span>Financeiro</span></button>
+        <button data-view="storage">▤ <span>Armazenamento</span></button>
+        <button data-view="support">? <span>Suporte</span></button>
+        <button data-view="announcements">✦ <span>Comunicados</span></button>
+        <button data-view="health">⌁ <span>Saúde do sistema</span></button>
+        <button data-view="audit">≡ <span>Auditoria</span></button>
+      </nav>
+      <button id="logout" class="logout">Sair</button>
+    </aside>
+    <main>
+      <header><button id="menu">☰</button><div><p class="eyebrow">ADMINISTRAÇÃO GLOBAL</p><h1 id="pageTitle">Visão geral</h1></div><div class="user"><span id="userName"></span><i></i></div></header>
+      <div id="alert" class="toast hidden"></div>
+      <section id="content"><div class="loader"></div></section>
+    </main>
+  </div>
+
+  <dialog id="modal"><form method="dialog"><button class="dialog-close">×</button><div id="modalContent"></div></form></dialog>
+  <script src="/platform/app.js"></script>
+</body>
+</html>

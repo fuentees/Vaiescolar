@@ -36,6 +36,146 @@ ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
 -- os tokens de 30 dias emitidos antes da troca (sem precisar de blacklist).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INT NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_cleared_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_platform_owner BOOLEAN NOT NULL DEFAULT false;
+
+-- Controle comercial da plataforma (separado da administracao de cada tenant).
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_email TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_phone TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cancellation_scheduled_at TIMESTAMPTZ;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS retention_until TIMESTAMPTZ;
+ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_status_check;
+ALTER TABLE tenants ADD CONSTRAINT tenants_status_check
+  CHECK (status IN ('trial','active','past_due','suspended','cancelled'));
+
+CREATE TABLE IF NOT EXISTS platform_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  monthly_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+  annual_price NUMERIC(12,2),
+  max_students INT NOT NULL DEFAULT 30,
+  max_staff INT NOT NULL DEFAULT 3,
+  max_vehicles INT NOT NULL DEFAULT 2,
+  max_schools INT NOT NULL DEFAULT 3,
+  storage_limit_mb INT NOT NULL DEFAULT 1024,
+  history_months INT NOT NULL DEFAULT 12,
+  features JSONB NOT NULL DEFAULT '{}'::jsonb,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO platform_plans(code,name,monthly_price,annual_price,max_students,max_staff,max_vehicles,max_schools,storage_limit_mb,features)
+VALUES
+ ('basic','Essencial',99.90,1078.92,30,3,2,3,1024,'{"gps":true,"contracts":true}'::jsonb),
+ ('professional','Profissional',179.90,1942.92,80,8,6,10,5120,'{"gps":true,"contracts":true,"payments":true,"reports":true}'::jsonb),
+ ('enterprise','Empresarial',349.90,3778.92,250,25,20,30,20480,'{"gps":true,"contracts":true,"payments":true,"reports":true,"branding":true,"priority_support":true}'::jsonb)
+ON CONFLICT(code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS platform_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL UNIQUE REFERENCES tenants(id) ON DELETE CASCADE,
+  plan_id UUID REFERENCES platform_plans(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'trial' CHECK (status IN ('trial','active','past_due','paused','cancelled')),
+  billing_cycle TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_cycle IN ('monthly','annual')),
+  current_period_start TIMESTAMPTZ,
+  current_period_end TIMESTAMPTZ,
+  trial_ends_at TIMESTAMPTZ,
+  provider TEXT,
+  provider_customer_id TEXT,
+  provider_subscription_id TEXT,
+  overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS platform_invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  subscription_id UUID REFERENCES platform_subscriptions(id) ON DELETE SET NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK(amount >= 0),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('draft','pending','paid','overdue','cancelled','refunded')),
+  due_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ,
+  description TEXT,
+  provider TEXT,
+  provider_invoice_id TEXT,
+  payment_url TEXT,
+  external_reference TEXT UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_platform_invoices_tenant ON platform_invoices(tenant_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS platform_storage_objects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  object_key TEXT NOT NULL UNIQUE,
+  size_bytes BIGINT NOT NULL DEFAULT 0 CHECK(size_bytes >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_platform_storage_tenant ON platform_storage_objects(tenant_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS platform_support_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+  subject TEXT NOT NULL,
+  description TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','critical')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','waiting','resolved','closed')),
+  assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS platform_announcements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  audience JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','scheduled','sent','cancelled')),
+  scheduled_at TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS platform_audit_log (
+  id BIGSERIAL PRIMARY KEY,
+  actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+  detail JSONB,
+  ip INET,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_platform_audit_created ON platform_audit_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS platform_maintenance_runs (
+  id BIGSERIAL PRIMARY KEY,
+  job_name TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('success','failed','skipped')),
+  affected_rows INT NOT NULL DEFAULT 0,
+  duration_ms INT NOT NULL DEFAULT 0,
+  detail JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_platform_maintenance_created
+  ON platform_maintenance_runs(job_name,created_at DESC);
+
+INSERT INTO platform_subscriptions(tenant_id,plan_id,status,billing_cycle,current_period_start,current_period_end)
+SELECT t.id,p.id,CASE WHEN t.status='trial' THEN 'trial' ELSE 'active' END,'monthly',now(),now()+interval '1 month'
+FROM tenants t LEFT JOIN platform_plans p ON p.code=t.plan
+ON CONFLICT(tenant_id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS vehicles (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -208,8 +348,8 @@ CREATE TABLE IF NOT EXISTS locations (
   recorded_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_locations_trip ON locations(trip_id, recorded_at);
--- Retencao aplicada em POST /api/trips/:id/locations (30 dias por padrao,
--- configuravel por GPS_RETENTION_DAYS). Este indice mantem a limpeza barata.
+-- Retencao aplicada pela manutencao diaria (30 dias por padrao,
+-- configuravel por GPS_RETENTION_DAYS). Este indice mantem a limpeza em lotes barata.
 CREATE INDEX IF NOT EXISTS idx_locations_recorded_at ON locations(recorded_at);
 
 -- Ultima posicao conhecida por viagem (leitura rapida O(1)).

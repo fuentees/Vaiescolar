@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api.dart';
 
@@ -42,6 +43,13 @@ class _ContractScreenState extends State<ContractScreen> {
   Future<void> _load() async {
     final contracts = await Api.studentContracts(widget.studentId);
     if (mounted) {
+      if (contracts.isNotEmpty && _name.text.trim().isEmpty) {
+        final current = contracts.first as Map<String, dynamic>;
+        final responsible = String(current['responsible_name'] ?? '').trim();
+        if (responsible.isNotEmpty && responsible != 'nao informado') {
+          _name.text = responsible;
+        }
+      }
       setState(() {
         _contracts = contracts;
         _loading = false;
@@ -50,19 +58,23 @@ class _ContractScreenState extends State<ContractScreen> {
   }
 
   Future<void> _sign(Map<String, dynamic> contract) async {
-    if (!_accepted ||
-        _name.text.trim().length < 3 ||
-        _cpf.text.replaceAll(RegExp(r'\D'), '').length != 11 ||
-        _password.text.isEmpty ||
-        _code.text.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'Confirme o aceite, nome, CPF, senha e codigo de 6 digitos.')));
+    final cpf = _cpf.text.replaceAll(RegExp(r'\D'), '');
+    final code = _code.text.replaceAll(RegExp(r'\D'), '');
+    final missing = <String>[];
+    if (!_accepted) missing.add('marque a caixa de aceite');
+    if (_name.text.trim().length < 3) missing.add('informe o nome completo');
+    if (cpf.length != 11) missing.add('informe os 11 digitos do CPF');
+    if (_password.text.isEmpty) missing.add('confirme sua senha');
+    if (code.length != 6) missing.add('informe o codigo de 6 digitos');
+    if (missing.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Para assinar, ${missing.join('; ')}.')));
       return;
     }
+    FocusScope.of(context).unfocus();
     setState(() => _saving = true);
     final error = await Api.signContract(contract['id'] as String,
-        _name.text.trim(), _cpf.text, _password.text, _code.text);
+        _name.text.trim(), cpf, _password.text, code);
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {
@@ -244,6 +256,7 @@ class _ContractScreenState extends State<ContractScreen> {
                     TextField(
                       controller: _name,
                       textCapitalization: TextCapitalization.words,
+                      autofillHints: const [AutofillHints.name],
                       decoration: const InputDecoration(
                           labelText: 'Nome completo de quem esta assinando',
                           prefixIcon: Icon(Icons.draw_outlined)),
@@ -252,14 +265,18 @@ class _ContractScreenState extends State<ContractScreen> {
                     TextField(
                       controller: _cpf,
                       keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      maxLength: 11,
                       decoration: const InputDecoration(
                           labelText: 'CPF de quem esta assinando',
+                          counterText: '',
                           prefixIcon: Icon(Icons.badge_outlined)),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _password,
                       obscureText: true,
+                      autofillHints: const [AutofillHints.password],
                       decoration: const InputDecoration(
                           labelText: 'Confirme sua senha',
                           prefixIcon: Icon(Icons.lock_outline)),
@@ -270,6 +287,9 @@ class _ContractScreenState extends State<ContractScreen> {
                         child: TextField(
                           controller: _code,
                           keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
                           maxLength: 6,
                           decoration: const InputDecoration(
                             labelText: 'Codigo de confirmacao',

@@ -86,6 +86,11 @@ test('POST /api/trips/:id/locations rejeita lote de GPS acima do limite de 200 i
   assert.equal(okRes.status, 200);
 });
 
+test('POST /api/trips/:id/locations rejeita lote vazio', async () => {
+  const res = await post(`/api/trips/${tripId}/locations`, [], driverToken);
+  assert.equal(res.status, 400);
+});
+
 test('PUT /api/payments/:id rejeita valor negativo', async () => {
   const res = await put(`/api/payments/${paymentId}`, { amount: -50 }, adminToken);
   assert.equal(res.status, 400);

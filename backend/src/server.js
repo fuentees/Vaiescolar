@@ -15,6 +15,8 @@ const db = require('./db');
 const { sign, authMiddleware, verifyToken, requireRole } = require('./auth');
 const hub = require('./hub');
 const push = require('./push');
+const createPlatformRouter = require('./platform');
+const { startMaintenance } = require('./maintenance');
 const {
   locationsBody,
   tripEventBody,
@@ -63,8 +65,32 @@ app.set('trust proxy', 1);
 // Apps mobile nao sao afetados por CORS (so navegadores aplicam essa
 // politica) -- fica configuravel via env pra quando/se existir um painel
 // web administrativo que precise ser restrito a uma origem especifica.
-app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*' }));
+const configuredOrigins = String(process.env.CORS_ORIGIN || '')
+  .split(',').map((value) => value.trim()).filter(Boolean);
+const corsOrigin = configuredOrigins.includes('*')
+  ? '*'
+  : configuredOrigins.length
+    ? configuredOrigins
+    : (process.env.NODE_ENV === 'production' ? false : '*');
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
+app.use('/platform', (_req, res, next) => {
+  res.set('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+}, express.static(path.resolve(__dirname, '..', 'platform')));
+app.use('/api/platform', createPlatformRouter({ db, push, hub }));
+app.get('/pay/:reference', async (req, res) => {
+  const result = await db.query(`SELECT i.amount,i.status,i.due_at,i.description,i.payment_url,t.name tenant_name
+    FROM platform_invoices i JOIN tenants t ON t.id=i.tenant_id WHERE i.external_reference=$1`, [req.params.reference]);
+  if (!result.rows.length) return res.status(404).send('Cobranca nao encontrada.');
+  const invoice = result.rows[0];
+  const safe = (value) => String(value || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cobranca VaiEscolar</title><style>body{font-family:system-ui;background:#f2f6f7;color:#18343a;margin:0;padding:24px}.card{max-width:520px;margin:8vh auto;background:#fff;padding:32px;border-radius:24px;box-shadow:0 18px 55px #1232}h1{color:#0f6672}.value{font-size:34px;font-weight:800}.status{padding:8px 12px;border-radius:99px;background:#e7f6ee;display:inline-block}.hint{color:#66777b}</style></head><body><main class="card"><h1>VaiEscolar</h1><p>Assinatura da transportadora</p><h2>${safe(invoice.tenant_name)}</h2><p>${safe(invoice.description)}</p><p class="value">R$ ${Number(invoice.amount).toFixed(2).replace('.', ',')}</p><p class="status">${safe(invoice.status)}</p><p class="hint">Este link identifica a cobranca. Para PIX, boleto ou cartao, o administrador global deve conectar um provedor de pagamentos. A confirmacao final sempre ocorre no servidor.</p></main></body></html>`);
+});
 app.get('/health', async (_req, res) => {
   try {
     await db.query('SELECT 1');
@@ -72,6 +98,9 @@ app.get('/health', async (_req, res) => {
       ok: true,
       database: 'connected',
       pushNotifications: push.isConfigured() ? 'configured' : 'not_configured',
+      websocket: hub.stats(),
+      databasePool: db.stats(),
+      uptimeSeconds: Math.round(process.uptime()),
     });
   } catch (error) {
     console.error('[health] banco indisponivel', error.message);
@@ -82,14 +111,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.29', buildNumber: 4035, releaseBuild: 35,
+      version: '1.0.30', buildNumber: 4036, releaseBuild: 36,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contrato identifica diretamente aluno, responsavel e CPF do assinante.',
+      notes: 'Correcao da assinatura: validacao clara, codigo normalizado e nome preenchido automaticamente.',
     },
     responsavel: {
-      version: '1.0.29', buildNumber: 4035, releaseBuild: 35,
+      version: '1.0.30', buildNumber: 4036, releaseBuild: 36,
       url: 'https://vaiescolar.onrender.com/downloads/VaiEscolar.apk',
-      notes: 'Contrato identifica diretamente aluno, responsavel e CPF do assinante.',
+      notes: 'Correcao da assinatura: validacao clara, codigo normalizado e nome preenchido automaticamente.',
     },
   };
   const version = versions[req.params.app];
@@ -160,10 +189,13 @@ app.post('/api/auth/register-tenant', async (req, res) => {
   try {
     await client.query('BEGIN');
     const t = await client.query(
-      'INSERT INTO tenants(name) VALUES($1) RETURNING id',
+      `INSERT INTO tenants(name,status,trial_ends_at) VALUES($1,'trial',now()+interval '14 days') RETURNING id`,
       [tenantName]
     );
     const tenantId = t.rows[0].id;
+    await client.query(`INSERT INTO platform_subscriptions(tenant_id,plan_id,status,billing_cycle,current_period_start,current_period_end,trial_ends_at)
+      SELECT $1,id,'trial','monthly',now(),now()+interval '14 days',now()+interval '14 days'
+      FROM platform_plans WHERE code='basic'`, [tenantId]);
     const hash = await bcrypt.hash(password, 10);
     const u = await client.query(
       `INSERT INTO users(tenant_id, role, name, email, password_hash)
@@ -188,6 +220,10 @@ app.post('/api/users', authMiddleware, requireRole('admin'), async (req, res) =>
   const { role, name, email, phone, password } = req.body;
   if (!['admin', 'driver', 'parent'].includes(role)) {
     return res.status(400).json({ error: 'role invalida' });
+  }
+  if (role === 'admin' || role === 'driver') {
+    const limitError = await planLimitError(req.auth.tenantId, 'staff');
+    if (limitError) return res.status(409).json({ error: limitError });
   }
   const passwordError = passwordProblem(password);
   if (passwordError) return res.status(400).json({ error: passwordError });
@@ -731,6 +767,8 @@ async function validateSchoolId(schoolId, tenantId) {
 }
 
 app.post('/api/students', authMiddleware, requireRole('admin'), validateBody(studentBody), async (req, res) => {
+  const limitError = await planLimitError(req.auth.tenantId, 'students');
+  if (limitError) return res.status(409).json({ error: limitError });
   const {
     name, school_name, home_address, school_id, monthly_fee,
     photo_url, birth_date, class_period, emergency_contact_name,
@@ -917,6 +955,30 @@ Ao assinar eletronicamente, o RESPONSAVEL confirma que leu integralmente o docum
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+}
+
+const planResources = {
+  students: { table: 'students', limit: 'max_students', label: 'alunos', where: '' },
+  staff: { table: 'users', limit: 'max_staff', label: 'usuarios da equipe', where: "AND role IN ('admin','driver')" },
+  vehicles: { table: 'vehicles', limit: 'max_vehicles', label: 'veiculos', where: '' },
+  schools: { table: 'schools', limit: 'max_schools', label: 'escolas', where: '' },
+};
+async function planLimitError(tenantId, resource) {
+  const config = planResources[resource];
+  if (!config) throw new Error('recurso de plano desconhecido');
+  const result = await db.query(
+    `SELECT COALESCE(NULLIF(s.overrides->>$2,''),'0')::int override_limit,
+            p.${config.limit} plan_limit,
+            (SELECT count(*) FROM ${config.table} WHERE tenant_id=$1 ${config.where})::int used
+       FROM platform_subscriptions s JOIN platform_plans p ON p.id=s.plan_id
+      WHERE s.tenant_id=$1`, [tenantId, config.limit]
+  );
+  if (!result.rows.length) return null;
+  const row = result.rows[0];
+  const limit = row.override_limit > 0 ? row.override_limit : row.plan_limit;
+  return row.used >= limit
+    ? `limite de ${config.label} do plano atingido (${limit}); altere o plano ou solicite uma liberacao`
+    : null;
 }
 
 function validCpf(value) {
@@ -1503,6 +1565,8 @@ app.get('/api/schools', authMiddleware, requireRole('admin'), async (req, res) =
 });
 
 app.post('/api/schools', authMiddleware, requireRole('admin'), validateBody(schoolBody), async (req, res) => {
+  const limitError = await planLimitError(req.auth.tenantId, 'schools');
+  if (limitError) return res.status(409).json({ error: limitError });
   const { name, address, phone, postal_code, street, number, complement,
     neighborhood, city, state, lat, lng } = req.body;
   if (!name) return res.status(400).json({ error: 'nome obrigatorio' });
@@ -1562,6 +1626,8 @@ app.get('/api/vehicles', authMiddleware, requireRole('driver', 'admin'), async (
 });
 
 app.post('/api/vehicles', authMiddleware, requireRole('admin'), validateBody(vehicleBody), async (req, res) => {
+  const limitError = await planLimitError(req.auth.tenantId, 'vehicles');
+  if (limitError) return res.status(409).json({ error: limitError });
   const { plate, model, capacity, year, color, document_expiry, status } = req.body;
   const r = await db.query(
     `INSERT INTO vehicles(tenant_id, plate, model, capacity, year, color, document_expiry, status)
@@ -3068,16 +3134,24 @@ app.post('/api/trips/:id/locations', authMiddleware, requireRole('driver', 'admi
   if (trip.rows.length === 0) return res.status(404).json({ error: 'viagem ativa nao encontrada' });
 
   const items = Array.isArray(req.body) ? req.body : [req.body];
-  let last = null;
-  for (const p of items) {
-    const recordedAt = p.recorded_at || new Date().toISOString();
-    await db.query(
-      `INSERT INTO locations(tenant_id, trip_id, lat, lng, speed, heading, accuracy, recorded_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [tenantId, tripId, p.lat, p.lng, p.speed ?? null, p.heading ?? null, p.accuracy ?? null, recordedAt]
-    );
-    last = { lat: p.lat, lng: p.lng, speed: p.speed ?? null, heading: p.heading ?? null, recorded_at: recordedAt };
-  }
+  const values = [];
+  const placeholders = [];
+  const normalized = items.map((p) => ({
+    lat: p.lat, lng: p.lng, speed: p.speed ?? null, heading: p.heading ?? null,
+    accuracy: p.accuracy ?? null, recorded_at: p.recorded_at || new Date().toISOString(),
+  }));
+  normalized.forEach((p, index) => {
+    const offset = index * 8;
+    placeholders.push(`($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8})`);
+    values.push(tenantId, tripId, p.lat, p.lng, p.speed, p.heading, p.accuracy, p.recorded_at);
+  });
+  await db.query(
+    `INSERT INTO locations(tenant_id,trip_id,lat,lng,speed,heading,accuracy,recorded_at)
+     VALUES ${placeholders.join(',')}`,
+    values
+  );
+  const last = normalized.reduce((newest, item) =>
+    new Date(item.recorded_at) > new Date(newest.recorded_at) ? item : newest);
 
   if (last) {
     await db.query(
@@ -3089,11 +3163,6 @@ app.post('/api/trips/:id/locations', authMiddleware, requireRole('driver', 'admi
     );
     // Retransmite em tempo real para os pais inscritos nesta viagem.
     hub.broadcast(tripId, { type: 'location', tripId, ...last });
-    const retentionDays = Math.min(90, Math.max(1, Number(process.env.GPS_RETENTION_DAYS) || 30));
-    await db.query(
-      `DELETE FROM locations WHERE recorded_at < now() - ($1::int * interval '1 day')`,
-      [retentionDays]
-    );
   }
   res.json({ ok: true, received: items.length });
 });
@@ -3374,5 +3443,8 @@ module.exports = { app, server };
 // mesmos, numa porta livre, sem depender de um processo externo rodando.
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => console.log(`API em http://localhost:${PORT}`));
+  server.listen(PORT, () => {
+    console.log(`API em http://localhost:${PORT}`);
+    startMaintenance();
+  });
 }

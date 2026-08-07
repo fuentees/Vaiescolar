@@ -15,7 +15,7 @@ const locationPing = z.object({
 // POST /api/trips/:id/locations aceita um ping unico OU um array (quando o
 // app faz batch da fila offline) -- limitado a 200 itens por request, pra um
 // cliente nao conseguir mandar um lote gigante numa unica chamada.
-const locationsBody = z.union([locationPing, z.array(locationPing).max(200)]);
+const locationsBody = z.union([locationPing, z.array(locationPing).min(1).max(200)]);
 
 // POST /api/trips/:id/events -- lat/lng sao opcionais aqui (o evento pode
 // vir sem GPS), mas se vierem precisam estar na faixa valida.
