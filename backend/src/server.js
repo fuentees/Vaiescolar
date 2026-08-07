@@ -111,14 +111,14 @@ app.get('/app-version/:app', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const versions = {
     motorista: {
-      version: '1.0.37', buildNumber: 4043, releaseBuild: 43,
+      version: '1.0.38', buildNumber: 4044, releaseBuild: 44,
       url: 'https://vaiescolar.onrender.com/downloads/TECO.apk',
-      notes: 'Arquivos oficiais TECO aplicados diretamente, sem redesenho ou reinterpretacao da marca.',
+      notes: 'Logotipo oficial TECO agora permanece visivel em todas as areas depois do login.',
     },
     responsavel: {
-      version: '1.0.37', buildNumber: 4043, releaseBuild: 43,
+      version: '1.0.38', buildNumber: 4044, releaseBuild: 44,
       url: 'https://vaiescolar.onrender.com/downloads/TECO.apk',
-      notes: 'Arquivos oficiais TECO aplicados diretamente, sem redesenho ou reinterpretacao da marca.',
+      notes: 'Logotipo oficial TECO agora permanece visivel em todas as areas depois do login.',
     },
   };
   const version = versions[req.params.app];

@@ -129,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TECO'),
+        title: const Text('Início'),
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
