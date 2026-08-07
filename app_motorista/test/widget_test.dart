@@ -13,7 +13,7 @@ void main() {
     expect(find.text('Sou Passageiro/Responsável'), findsOneWidget);
     await tester.tap(find.text('Sou Passageiro/Responsável'));
     await tester.pumpAndSettle();
-    expect(find.text('TECO'), findsOneWidget);
+    expect(find.bySemanticsLabel('TECO'), findsOneWidget);
     expect(find.text('Acompanhe cada caminho em tempo real'), findsOneWidget);
     expect(find.text('Criar conta com codigo de convite'), findsOneWidget);
   });

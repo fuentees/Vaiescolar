@@ -45,23 +45,30 @@ class TecoBrandLockup extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('TECO',
-                style: TextStyle(
-                  color: color,
-                  fontSize: compact ? 24 : 38,
-                  height: .9,
-                  letterSpacing: compact ? 1 : 2,
-                  fontWeight: FontWeight.w900,
-                )),
+            Semantics(
+              label: 'TECO',
+              image: true,
+              child: ExcludeSemantics(
+                child: SizedBox(
+                  width: compact ? 90 : 190,
+                  height: compact ? 25 : 51,
+                  child: CustomPaint(
+                    painter: _TecoWordmarkPainter(color: color),
+                  ),
+                ),
+              ),
+            ),
             if (!compact) ...[
-              const SizedBox(height: 6),
-              Text('TRANSPORTE ESCOLAR CONECTADO',
-                  style: TextStyle(
-                    color: color.withValues(alpha: .82),
-                    fontSize: 8.2,
-                    letterSpacing: 1.05,
-                    fontWeight: FontWeight.w600,
-                  )),
+              const SizedBox(height: 4),
+              Text(
+                'Transporte Escolar Conectado',
+                style: TextStyle(
+                  color: color.withValues(alpha: .88),
+                  fontSize: 9,
+                  letterSpacing: .15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
           ],
         ),
@@ -70,106 +77,183 @@ class TecoBrandLockup extends StatelessWidget {
   }
 }
 
+class _TecoWordmarkPainter extends CustomPainter {
+  final Color color;
+  const _TecoWordmarkPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 720, size.height / 180);
+    final brand = Paint()..color = color;
+
+    canvas.drawPath(
+      Path()
+        ..addRect(const Rect.fromLTWH(0, 0, 166, 42))
+        ..addRect(const Rect.fromLTWH(59, 42, 48, 138)),
+      brand,
+    );
+    final e = Path()
+      ..moveTo(182, 0)
+      ..lineTo(346, 0)
+      ..lineTo(320, 42)
+      ..lineTo(230, 42)
+      ..lineTo(230, 66)
+      ..lineTo(320, 66)
+      ..lineTo(320, 107)
+      ..lineTo(230, 107)
+      ..lineTo(230, 138)
+      ..lineTo(346, 138)
+      ..lineTo(320, 180)
+      ..lineTo(182, 180)
+      ..close();
+    canvas.drawPath(e, brand);
+
+    final cOuter = Path()..addOval(const Rect.fromLTWH(354, 0, 174, 180));
+    final cInner = Path()..addOval(const Rect.fromLTWH(400, 42, 92, 96));
+    var c = Path.combine(PathOperation.difference, cOuter, cInner);
+    c = Path.combine(
+      PathOperation.difference,
+      c,
+      Path()..addRect(const Rect.fromLTWH(480, 52, 60, 76)),
+    );
+    canvas.drawPath(c, brand);
+
+    final oOuter = Path()..addOval(const Rect.fromLTWH(536, 0, 174, 180));
+    final oInner = Path()..addOval(const Rect.fromLTWH(582, 42, 82, 96));
+    var o = Path.combine(PathOperation.difference, oOuter, oInner);
+    o = Path.combine(
+      PathOperation.difference,
+      o,
+      Path()..addRect(const Rect.fromLTWH(665, 57, 55, 66)),
+    );
+    canvas.drawPath(o, brand);
+
+    final connection = Paint()
+      ..color = tecoCyan
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(656, 78), const Offset(700, 78), connection);
+    canvas.drawLine(const Offset(656, 102), const Offset(700, 102), connection);
+    canvas.drawCircle(const Offset(705, 90), 15, Paint()..color = tecoCyan);
+    canvas.drawCircle(const Offset(705, 90), 6, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TecoWordmarkPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
 class _TecoMarkPainter extends CustomPainter {
   final bool dark;
   const _TecoMarkPainter({required this.dark});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final sx = size.width / 512;
-    final sy = size.height / 512;
-    canvas.scale(sx, sy);
-    canvas.translate(51, 51);
-    canvas.scale(.8);
+    canvas.scale(size.width / 512, size.height / 512);
+    canvas.translate(31, 31);
+    canvas.scale(.88);
     final markColor = dark ? Colors.white : tecoPrimary;
+    final background = dark ? tecoPrimary : Colors.white;
 
     final outerPin = Path()
-      ..moveTo(255, 48)
-      ..cubicTo(159, 48, 86, 114, 86, 206)
-      ..cubicTo(86, 274, 134, 341, 255, 456)
-      ..cubicTo(376, 341, 424, 274, 424, 206)
-      ..cubicTo(424, 114, 351, 48, 255, 48)
+      ..moveTo(248, 57)
+      ..cubicTo(156, 57, 88, 123, 88, 213)
+      ..cubicTo(88, 280, 138, 346, 248, 448)
+      ..cubicTo(358, 346, 408, 280, 408, 213)
+      ..cubicTo(408, 123, 340, 57, 248, 57)
       ..close();
     canvas.drawPath(outerPin, Paint()..color = markColor);
     final pinCutout = Path()
-      ..moveTo(255, 99)
-      ..cubicTo(320, 99, 367, 142, 367, 205)
-      ..cubicTo(367, 251, 336, 299, 255, 381)
-      ..cubicTo(174, 299, 143, 251, 143, 205)
-      ..cubicTo(143, 142, 190, 99, 255, 99)
+      ..moveTo(248, 117)
+      ..cubicTo(301, 117, 344, 156, 344, 213)
+      ..cubicTo(344, 253, 315, 297, 248, 364)
+      ..cubicTo(181, 297, 152, 253, 152, 213)
+      ..cubicTo(152, 156, 195, 117, 248, 117)
       ..close();
-    canvas.drawPath(
-        pinCutout, Paint()..color = dark ? tecoPrimary : Colors.white);
+    canvas.drawPath(pinCutout, Paint()..color = background);
 
-    final mirrorPaint = Paint()..color = const Color(0xFF6B7280);
+    final mirror = dark ? tecoYellow : const Color(0xFF42474E);
     canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            const Rect.fromLTWH(171, 145, 30, 84), const Radius.circular(14)),
-        dark ? (Paint()..color = tecoYellow) : mirrorPaint);
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(179, 151, 17, 47),
+        const Radius.circular(7),
+      ),
+      Paint()..color = mirror,
+    );
     canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            const Rect.fromLTWH(309, 145, 30, 84), const Radius.circular(14)),
-        dark ? (Paint()..color = tecoYellow) : mirrorPaint);
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(300, 151, 17, 47),
+        const Radius.circular(7),
+      ),
+      Paint()..color = mirror,
+    );
     canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            const Rect.fromLTWH(193, 123, 124, 145), const Radius.circular(24)),
-        Paint()..color = tecoYellow);
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(190, 126, 116, 139),
+        const Radius.circular(18),
+      ),
+      Paint()..color = tecoYellow,
+    );
     canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            const Rect.fromLTWH(215, 111, 80, 22), const Radius.circular(10)),
-        Paint()..color = tecoYellow);
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(222, 114, 52, 13),
+        const Radius.circular(6.5),
+      ),
+      Paint()..color = dark ? tecoPrimary : const Color(0xFF1F2937),
+    );
+    final busDetail = dark ? tecoPrimary : Colors.white;
+    canvas.drawCircle(const Offset(207, 142), 5, Paint()..color = busDetail);
+    canvas.drawCircle(const Offset(289, 142), 5, Paint()..color = busDetail);
     canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            const Rect.fromLTWH(210, 144, 90, 52), const Radius.circular(8)),
-        Paint()..color = dark ? tecoPrimary : Colors.white);
-    canvas.drawLine(
-        const Offset(255, 145),
-        const Offset(255, 195),
-        Paint()
-          ..color = const Color(0xFFD99B22)
-          ..strokeWidth = 5);
-    final detailColor = dark ? tecoPrimary : Colors.white;
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(207, 151, 82, 53),
+        const Radius.circular(7),
+      ),
+      Paint()..color = busDetail,
+    );
+    canvas.drawCircle(const Offset(209, 226), 9, Paint()..color = busDetail);
+    canvas.drawCircle(const Offset(287, 226), 9, Paint()..color = busDetail);
     canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            const Rect.fromLTWH(211, 207, 88, 12), const Radius.circular(6)),
-        Paint()..color = detailColor);
-    canvas.drawCircle(const Offset(216, 238), 9, Paint()..color = detailColor);
-    canvas.drawCircle(const Offset(294, 238), 9, Paint()..color = detailColor);
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(226, 217, 44, 7),
+        const Radius.circular(3.5),
+      ),
+      Paint()..color = busDetail,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(221, 232, 54, 7),
+        const Radius.circular(3.5),
+      ),
+      Paint()..color = busDetail,
+    );
 
     final road = Path()
-      ..moveTo(34, 489)
-      ..cubicTo(79, 404, 141, 346, 217, 314)
-      ..cubicTo(280, 287, 352, 279, 443, 288)
-      ..lineTo(424, 341)
-      ..cubicTo(348, 333, 288, 339, 236, 361)
-      ..cubicTo(176, 386, 127, 429, 89, 489)
+      ..moveTo(32, 484)
+      ..cubicTo(108, 363, 225, 303, 412, 310)
+      ..lineTo(435, 358)
+      ..cubicTo(277, 353, 178, 395, 109, 484)
       ..close();
     canvas.drawPath(road, Paint()..color = markColor);
-    final lane = Path()
-      ..moveTo(103, 489)
-      ..cubicTo(140, 434, 184, 395, 235, 372)
-      ..cubicTo(280, 352, 331, 344, 393, 347);
-    canvas.drawPath(
-        lane,
-        Paint()
-          ..color = dark ? tecoPrimary : Colors.white
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 12
-          ..strokeCap = StrokeCap.round);
-    final connection = Path()
-      ..moveTo(204, 431)
-      ..cubicTo(272, 386, 343, 364, 418, 367)
-      ..cubicTo(439, 368, 456, 359, 468, 341);
-    canvas.drawPath(
-        connection,
-        Paint()
-          ..color = tecoCyan
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 11
-          ..strokeCap = StrokeCap.round);
-    canvas.drawCircle(const Offset(473, 333), 21, Paint()..color = tecoCyan);
-    canvas.drawCircle(const Offset(473, 333), 9,
-        Paint()..color = dark ? tecoPrimary : Colors.white);
+    final lanePaint = Paint()
+      ..color = background
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(130, 455), const Offset(160, 431), lanePaint);
+    canvas.drawLine(const Offset(187, 414), const Offset(222, 397), lanePaint);
+    canvas.drawLine(const Offset(251, 385), const Offset(289, 374), lanePaint);
+    canvas.drawLine(const Offset(321, 367), const Offset(360, 362), lanePaint);
+
+    final cyanRoad = Path()
+      ..moveTo(150, 484)
+      ..cubicTo(222, 405, 311, 371, 432, 379)
+      ..lineTo(441, 412)
+      ..cubicTo(335, 405, 257, 427, 197, 484)
+      ..close();
+    canvas.drawPath(cyanRoad, Paint()..color = tecoCyan);
+    canvas.drawCircle(const Offset(443, 394), 22, Paint()..color = tecoCyan);
+    canvas.drawCircle(const Offset(443, 394), 10, Paint()..color = background);
   }
 
   @override

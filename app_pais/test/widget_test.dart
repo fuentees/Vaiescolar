@@ -3,9 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:app_pais/main.dart';
 
 void main() {
-  testWidgets('App inicia na tela de login quando nao ha token salvo', (WidgetTester tester) async {
+  testWidgets('App inicia na tela de login quando nao ha token salvo',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const PaisApp());
-    expect(find.text('TECO'), findsOneWidget);
+    expect(find.bySemanticsLabel('TECO'), findsOneWidget);
     expect(find.text('Acompanhe cada caminho em tempo real'), findsOneWidget);
     expect(find.text('Entrar'), findsOneWidget);
   });
