@@ -28,9 +28,11 @@ técnicos e nomes de arquivos antigos necessários para compatibilidade.
 
 ## Ativos
 
-- `assets/branding/teco-logo.svg`: assinatura horizontal.
-- `assets/branding/teco-icon-light.svg`: aplicativo sobre fundo claro.
-- `assets/branding/teco-icon-dark.svg`: aplicativo sobre fundo escuro.
+- `assets/branding/teco-logo.png`: assinatura horizontal oficial recortada do material fornecido.
+- `assets/branding/teco-icon-light.png`: aplicativo claro oficial fornecido.
+- `assets/branding/teco-icon-dark.png`: aplicativo escuro oficial fornecido.
+
+Esses arquivos raster oficiais devem ser usados diretamente. Nao redesenhar, vetorizar ou reinterpretar a marca.
 
 Os ícones Android e iOS são derivados desses vetores. Não esticar, girar,
 recolorir ou substituir o ônibus por carro. O marcador da van no mapa é uma

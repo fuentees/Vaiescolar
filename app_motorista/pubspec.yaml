@@ -1,7 +1,7 @@
 name: app_motorista
 description: App do motorista - rastreamento em 1o plano de alta precisao (stack 100% gratuita).
 publish_to: "none"
-version: 1.0.36+4042
+version: 1.0.37+4043
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -41,13 +41,18 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/teco-logo.png
+    - assets/branding/teco-icon-light.png
+    - assets/branding/teco-icon-dark.png
 
-# Splash nativa (gerada com `dart run flutter_native_splash:create`) --
-# substitui a splash branca padrao do Flutter enquanto nao existe um
-# logotipo definitivo (ver README, secao de identidade visual pendente).
 flutter_native_splash:
-  color: "#0F6B6B"
-  color_dark: "#0E1514"
+  color: "#FFFFFF"
+  color_dark: "#0F4C5C"
+  image: assets/branding/teco-icon-light.png
+  image_dark: assets/branding/teco-icon-dark.png
   android_12:
-    color: "#0F6B6B"
-    color_dark: "#0E1514"
+    color: "#FFFFFF"
+    color_dark: "#0F4C5C"
+    image: assets/branding/teco-icon-light.png
+    image_dark: assets/branding/teco-icon-dark.png
