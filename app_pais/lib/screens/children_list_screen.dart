@@ -10,6 +10,7 @@ import '../services/api.dart';
 import '../services/api_result.dart';
 import '../services/app_refresh_signal.dart';
 import '../theme.dart';
+import '../widgets/teco_brand.dart';
 import 'link_child_screen.dart';
 import 'maintenance_screen.dart';
 import 'notifications_screen.dart';
@@ -772,7 +773,7 @@ class _ChildrenListScreenState extends State<ChildrenListScreen> {
     final attentionItems = _attentionItems();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Início'),
+        title: const TecoBrandLockup(compact: true),
         actions: [
           IconButton(
             tooltip: 'Notificações',

@@ -43,3 +43,25 @@ class TecoBrandLockup extends StatelessWidget {
         ),
       );
 }
+
+/// Identificacao discreta das telas internas, sem criar uma barra adicional.
+class TecoBrandedTitle extends StatelessWidget {
+  final String label;
+  const TecoBrandedTitle(this.label, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const TecoBrandMark(size: 30),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+}

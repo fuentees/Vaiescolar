@@ -4,6 +4,7 @@ import '../config.dart';
 import '../services/api.dart';
 import '../services/api_result.dart';
 import '../theme.dart';
+import 'package:app_pais/widgets/teco_brand.dart';
 import 'finance_screen.dart';
 import 'maintenance_screen.dart';
 import 'notifications_screen.dart';
@@ -129,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Início'),
+        title: const TecoBrandLockup(compact: true),
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined),

@@ -9,7 +9,6 @@ import 'location_tab_screen.dart';
 import 'profile_screen.dart';
 import '../widgets/permission_reminder.dart';
 import '../widgets/connectivity_banner.dart';
-import '../widgets/authenticated_brand_bar.dart';
 
 class _NavTab {
   final String label;
@@ -129,7 +128,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           children: [
             const ConnectivityBanner(),
             const PermissionReminder(),
-            const AuthenticatedBrandBar(),
             Expanded(
                 child: IndexedStack(
               index: _index,
