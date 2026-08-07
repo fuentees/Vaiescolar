@@ -114,16 +114,18 @@ app.get('/app-version/:app', (req, res) => {
       version: '1.0.38', buildNumber: 4044, releaseBuild: 44,
       url: 'https://vaiescolar.onrender.com/downloads/TECO.apk',
       notes: 'Logotipo oficial TECO agora permanece visivel em todas as areas depois do login.',
+      mandatory: true,
     },
     responsavel: {
       version: '1.0.38', buildNumber: 4044, releaseBuild: 44,
       url: 'https://vaiescolar.onrender.com/downloads/TECO.apk',
       notes: 'Logotipo oficial TECO agora permanece visivel em todas as areas depois do login.',
+      mandatory: true,
     },
   };
   const version = versions[req.params.app];
   if (!version) return res.status(404).json({ error: 'app nao encontrado' });
-  res.json({ ...version, mandatory: false });
+  res.json(version);
 });
 
 // Downloads publicos para instalacao de teste. `res.download` acrescenta
