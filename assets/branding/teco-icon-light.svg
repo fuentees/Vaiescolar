@@ -1,11 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#fff"/>
-  <path d="M252 338C180 257 132 202 132 137 132 61 188 24 253 24c72 0 124 50 124 119 0 64-52 123-125 195Z" fill="none" stroke="#0F4C5C" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M28 494c74-111 160-145 268-127 74 12 121-8 177-72" fill="none" stroke="#0F4C5C" stroke-width="54" stroke-linecap="round"/>
-  <path d="M282 401c72 13 119-9 174-73" fill="none" stroke="#2BB3C0" stroke-width="18" stroke-linecap="round"/>
-  <circle cx="470" cy="317" r="22" fill="#2BB3C0"/><circle cx="470" cy="317" r="9" fill="#fff"/>
-  <rect x="188" y="91" width="132" height="142" rx="25" fill="#F4B942"/>
-  <rect x="207" y="111" width="94" height="48" rx="9" fill="#0F4C5C"/>
-  <rect x="207" y="177" width="94" height="19" rx="5" fill="#fff"/>
-  <circle cx="213" cy="232" r="14" fill="#0F4C5C"/><circle cx="295" cy="232" r="14" fill="#0F4C5C"/>
+  <rect x="8" y="8" width="496" height="496" rx="108" fill="#FFFFFF"/>
+  <g transform="translate(51 51) scale(.8)">
+  <!-- Pin de localizacao da marca -->
+  <path fill="#0F4C5C" fill-rule="evenodd" d="M255 48c-96 0-169 66-169 158 0 68 48 135 169 250 121-115 169-182 169-250 0-92-73-158-169-158Zm0 51c65 0 112 43 112 106 0 46-31 94-112 176-81-82-112-130-112-176 0-63 47-106 112-106Z"/>
+  <!-- Onibus escolar frontal -->
+  <g>
+    <path d="M185 145h11v84h-11c-8 0-14-6-14-14v-56c0-8 6-14 14-14Zm140 0h-11v84h11c8 0 14-6 14-14v-56c0-8-6-14-14-14Z" fill="#6B7280"/>
+    <rect x="193" y="123" width="124" height="145" rx="24" fill="#F4B942"/>
+    <rect x="215" y="111" width="80" height="22" rx="10" fill="#F4B942"/>
+    <rect x="210" y="144" width="90" height="52" rx="8" fill="#FFFFFF" stroke="#D99B22" stroke-width="5"/>
+    <path d="M255 145v50" stroke="#D99B22" stroke-width="5"/>
+    <rect x="211" y="207" width="88" height="12" rx="6" fill="#FFFFFF"/>
+    <circle cx="216" cy="238" r="9" fill="#FFFFFF"/>
+    <circle cx="294" cy="238" r="9" fill="#FFFFFF"/>
+    <rect x="210" y="250" width="90" height="10" rx="5" fill="#D99B22"/>
+    <path d="M207 262v18M303 262v18" stroke="#6B7280" stroke-width="12" stroke-linecap="round"/>
+  </g>
+  <!-- Estrada curva, como na arte original -->
+  <path d="M34 489c45-85 107-143 183-175 63-27 135-35 226-26l-19 53c-76-8-136-2-188 20-60 25-109 68-147 128H34Z" fill="#0F4C5C"/>
+  <path d="M103 489c37-55 81-94 132-117 45-20 96-28 158-25" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-dasharray="46 28"/>
+  <path d="M89 489c38-62 87-107 145-133 54-24 116-31 190-24" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <!-- Conexao digital -->
+  <path d="M204 431c68-45 139-67 214-64 21 1 38-8 50-26" fill="none" stroke="#2BB3C0" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="473" cy="333" r="21" fill="#2BB3C0"/>
+  <circle cx="473" cy="333" r="9" fill="#FFFFFF"/>
+  </g>
 </svg>
