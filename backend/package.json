@@ -13,7 +13,7 @@
     "platform:promote": "node src/promote-platform-owner.js",
     "load:test": "node scripts/load-test.js",
     "backup:verify": "node scripts/verify-backup.js",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
